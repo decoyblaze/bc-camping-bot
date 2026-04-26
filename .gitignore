@@ -1,0 +1,31 @@
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Sessions contain auth cookies — never commit
+sessions/
+*.bc-camping-bot/
+
+# Config may contain personal info
+configs/booking.yaml
+
+# Screenshots and debug files
+*.png
+captured_requests.json
+capture_payload.py
+
+# Build artifacts
+*.spec
+
+# Virtual env
+.venv/
+venv/
+
+# IDE / system
+.DS_Store
+CLAUDE.md
+.claude/

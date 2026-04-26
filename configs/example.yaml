@@ -1,0 +1,24 @@
+# BC Camping Bot - Booking Configuration
+# Copy this file and fill in your details
+
+bookings:
+  - name: "Cameron - Rathtrevor Beach"
+    park: "Rathtrevor Beach"
+    campsite: "B21"              # specific site number, or "any" for first available
+    arrival_date: "2026-07-24"
+    num_nights: 2
+    num_people: 4
+    num_tent_pads: 1
+    equipment_type: "tent"       # tent, rv, or vehicle
+    session_file: "sessions/cameron.json"
+
+  # Add more bookings for friends:
+  # - name: "Friend - Golden Ears"
+  #   park: "Golden Ears"
+  #   campsite: "any"
+  #   arrival_date: "2026-08-15"
+  #   num_nights: 3
+  #   num_people: 6
+  #   num_tent_pads: 2
+  #   equipment_type: "tent"
+  #   session_file: "sessions/friend.json"

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bc-camping-bot"
+version = "0.1.0"
+description = "Automated campsite booking bot for BC Parks (discovercamping.ca)"
+requires-python = ">=3.9"
+dependencies = [
+    "playwright>=1.40.0",
+    "pyyaml>=6.0",
+    "ntplib>=0.4.0",
+    "rich>=13.0.0",
+    "pywebview>=4.0",
+    "httpx[http2]>=0.27.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["bc_camping_bot*"]
+
+[project.scripts]
+save-session = "bc_camping_bot.session:main"
+book = "bc_camping_bot.runner:main"
+camping-bot = "bc_camping_bot.gui:main"
