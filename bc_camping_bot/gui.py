@@ -205,6 +205,10 @@ HTML = """
         <option value="session">Save separate login session</option>
       </select>
     </div>
+    <div class="field" id="chrome_profile_row">
+      <label>Chrome Profile</label>
+      <select id="chrome_profile">CHROME_PROFILE_OPTIONS</select>
+    </div>
     <div class="field" id="session_name_row" style="display:none">
       <label>Session Name</label>
       <input id="session_name" value="SESSION_NAME_PLACEHOLDER" placeholder="Used for login session">
@@ -282,6 +286,7 @@ HTML = """
 
     function toggleLoginFields() {
       const method = document.getElementById('login_method').value;
+      document.getElementById('chrome_profile_row').style.display = method === 'chrome' ? 'flex' : 'none';
       document.getElementById('session_name_row').style.display = method === 'session' ? 'flex' : 'none';
       document.getElementById('btn_login').style.display = method === 'session' ? '' : 'none';
     }
@@ -301,6 +306,7 @@ HTML = """
         session_name: document.getElementById('session_name').value,
         mode: document.getElementById('mode').value,
         login_method: document.getElementById('login_method').value,
+        chrome_profile: document.getElementById('chrome_profile').value,
         test_timer: document.getElementById('test_timer').checked,
       };
     }
@@ -540,6 +546,7 @@ class Api:
             return
 
         use_chrome = data.get("login_method", "chrome") == "chrome"
+        chrome_profile = data.get("chrome_profile", "Default")
 
         if not use_chrome:
             session_path = Path(booking.session_file)
@@ -575,12 +582,14 @@ class Api:
                 if api_mode and not test_run:
                     loop.run_until_complete(
                         self._run_booking_api(booking, full_checkout=full_checkout,
-                                              use_chrome=use_chrome, test_timer=test_timer)
+                                              use_chrome=use_chrome, test_timer=test_timer,
+                                              chrome_profile=chrome_profile)
                     )
                 else:
                     loop.run_until_complete(
                         self._run_booking(booking, test_run=test_run, full_checkout=full_checkout,
-                                          use_chrome=use_chrome, test_timer=test_timer)
+                                          use_chrome=use_chrome, test_timer=test_timer,
+                                          chrome_profile=chrome_profile)
                     )
             except asyncio.CancelledError:
                 self._log("Cancelled.")
@@ -597,7 +606,7 @@ class Api:
         self._worker_thread = threading.Thread(target=run, daemon=True)
         self._worker_thread.start()
 
-    async def _run_booking(self, booking, test_run, full_checkout, use_chrome=False, test_timer=False):
+    async def _run_booking(self, booking, test_run, full_checkout, use_chrome=False, test_timer=False, chrome_profile="Default"):
         self._worker_task = asyncio.current_task()
         from datetime import timedelta as td
 
@@ -617,17 +626,14 @@ class Api:
         async with async_playwright() as pw:
             browser = None
             if use_chrome:
-                self._log("Launching with your Chrome profile...")
-                self._log("(Chrome must be closed for this to work)")
+                self._log(f"Connecting to Chrome (profile '{chrome_profile}')...")
                 try:
-                    context, page = await launch_with_chrome_profile(pw)
+                    context, page = await launch_with_chrome_profile(pw, profile=chrome_profile, log=self._log)
                 except Exception as e:
-                    if "already running" in str(e).lower() or "lock" in str(e).lower():
-                        self._error("Close Chrome first, then try again.")
-                    else:
-                        self._error(f"Failed to launch Chrome profile: {e}")
+                    self._error(f"Failed to connect to Chrome: {e}")
                     return
                 await apply_stealth(page)
+                self._success("Connected — new tab opened in your Chrome.")
             else:
                 browser = await pw.chromium.launch(headless=False)
                 context = await load_session(browser.new_context, booking)
@@ -781,7 +787,7 @@ class Api:
 
     # ── API Mode ──────────────────────────────────────────────
 
-    async def _run_booking_api(self, booking, full_checkout, use_chrome=False, test_timer=False):
+    async def _run_booking_api(self, booking, full_checkout, use_chrome=False, test_timer=False, chrome_profile="Default"):
         """Nuclear fast mode: direct HTTP API calls for add-to-cart, browser only for checkout."""
         self._worker_task = asyncio.current_task()
         import time as _time
@@ -799,16 +805,14 @@ class Api:
         async with async_playwright() as pw:
             browser = None
             if use_chrome:
-                self._log("Launching Chrome profile (for session cookies)...")
+                self._log(f"Connecting to Chrome (profile '{chrome_profile}')...")
                 try:
-                    context, page = await launch_with_chrome_profile(pw)
+                    context, page = await launch_with_chrome_profile(pw, profile=chrome_profile, log=self._log)
                 except Exception as e:
-                    if "already running" in str(e).lower() or "lock" in str(e).lower():
-                        self._error("Close Chrome first, then try again.")
-                    else:
-                        self._error(f"Failed to launch Chrome profile: {e}")
+                    self._error(f"Failed to connect to Chrome: {e}")
                     return
                 await apply_stealth(page)
+                self._success("Connected — new tab opened in your Chrome.")
             else:
                 browser = await pw.chromium.launch(headless=False)
                 context = await load_session(browser.new_context, booking)
@@ -981,7 +985,34 @@ class Api:
 
 def main():
     default_name = os.environ.get("USER", "default")
+
+    chrome_data = Path.home() / "Library/Application Support/Google/Chrome"
+    profile_options = ""
+    for d in sorted(chrome_data.iterdir()):
+        if not d.is_dir():
+            continue
+        prefs = d / "Preferences"
+        if not prefs.exists():
+            continue
+        name = d.name
+        if name == "System Profile":
+            continue
+        try:
+            import json as _json
+            p = _json.loads(prefs.read_text())
+            accts = p.get("account_info", [])
+            label = name
+            if accts:
+                label += f" ({accts[0].get('email', '')})"
+            selected = " selected" if accts else ""
+            profile_options += f'<option value="{name}"{selected}>{label}</option>\n'
+        except Exception:
+            profile_options += f'<option value="{name}">{name}</option>\n'
+    if not profile_options:
+        profile_options = '<option value="Default">Default</option>'
+
     html = HTML.replace("SESSION_NAME_PLACEHOLDER", default_name)
+    html = html.replace("CHROME_PROFILE_OPTIONS", profile_options)
 
     api = Api()
 

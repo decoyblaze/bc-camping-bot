@@ -42,7 +42,7 @@ CLI alternative: `.venv/bin/book --force`
 - **Cart is tied to browser session, not account.** Can't checkout on a different device/browser. The bot must complete checkout in the same Playwright browser that added to cart.
 - **The "Available Areas" dropdown NEVER appears without clicking Search first.** Always click Search — don't wait for it to appear on its own.
 - **First real run took 8.44s to Add to stay, 13.31s total.** Server load at 7 AM is the bottleneck, not code speed.
-- **Use Chrome profile, not saved session.** Freshest cookies, better anti-detection.
+- **Use Chrome profile, not saved session.** Freshest cookies, better anti-detection. Bot connects to Chrome via CDP — no need to close Chrome.
 - **Test runs show 0.11–0.31s to cart** — code is optimized, server response is the variable.
 
 ## Key technical details — READ THESE before making changes
@@ -66,8 +66,10 @@ CLI alternative: `.venv/bin/book --force`
 - `dismiss_dialogs` timeouts should be minimal (300ms).
 
 ### Login
-- Default method: "Use my Chrome profile" — uses `launch_persistent_context` with the user's Chrome data dir. Chrome must be closed first.
+- Default method: "Use my Chrome profile" — connects to Chrome via CDP (Chrome DevTools Protocol). If Chrome isn't running, launches it with `--remote-debugging-port=9222`. If Chrome is running without CDP, gracefully restarts it with the flag (tabs auto-restore). Opens a new tab in the user's real Chrome session — fully logged in, all cookies intact.
+- GUI has a "Chrome Profile" dropdown that auto-discovers profiles from `~/Library/Application Support/Google/Chrome/` and pre-selects the one with a signed-in Google account.
 - Alternative: "Save separate login session" — opens browser, user logs in, saves cookies/storage state to JSON.
+- The profile-copy approach (copying Chrome profile to temp dir) was tried and abandoned — Chrome keeps session cookies in memory while running, so the copy is always missing the active login.
 
 ### Test Timer
 - GUI has a "Test Timer" checkbox that sets the target to 1 minute from now instead of the real booking time. Use this for end-to-end testing without waiting for 7 AM.
