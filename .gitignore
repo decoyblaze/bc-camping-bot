@@ -27,5 +27,4 @@ venv/
 
 # IDE / system
 .DS_Store
-CLAUDE.md
 .claude/
