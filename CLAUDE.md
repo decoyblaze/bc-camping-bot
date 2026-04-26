@@ -42,7 +42,7 @@ CLI alternative: `.venv/bin/book --force`
 - **Cart is tied to browser session, not account.** Can't checkout on a different device/browser. The bot must complete checkout in the same Playwright browser that added to cart.
 - **The "Available Areas" dropdown NEVER appears without clicking Search first.** Always click Search — don't wait for it to appear on its own.
 - **First real run took 8.44s to Add to stay, 13.31s total.** Server load at 7 AM is the bottleneck, not code speed.
-- **Use Chrome profile, not saved session.** Freshest cookies, better anti-detection. Bot connects to Chrome via CDP — no need to close Chrome.
+- **Use Chrome profile, not saved session.** Freshest cookies, better anti-detection. Bot auto-closes Chrome, uses profile, reopens when done.
 - **Test runs show 0.11–0.31s to cart** — code is optimized, server response is the variable.
 
 ## Key technical details — READ THESE before making changes
@@ -66,10 +66,12 @@ CLI alternative: `.venv/bin/book --force`
 - `dismiss_dialogs` timeouts should be minimal (300ms).
 
 ### Login
-- Default method: "Use my Chrome profile" — connects to Chrome via CDP (Chrome DevTools Protocol). If Chrome isn't running, launches it with `--remote-debugging-port=9222`. If Chrome is running without CDP, gracefully restarts it with the flag (tabs auto-restore). Opens a new tab in the user's real Chrome session — fully logged in, all cookies intact.
+- Default method: "Use my Chrome profile" — if Chrome is running, gracefully quits it (sessions flush to disk), uses the profile directly via `launch_persistent_context`, then reopens Chrome when done. All cookies/login intact.
 - GUI has a "Chrome Profile" dropdown that auto-discovers profiles from `~/Library/Application Support/Google/Chrome/` and pre-selects the one with a signed-in Google account.
 - Alternative: "Save separate login session" — opens browser, user logs in, saves cookies/storage state to JSON.
-- The profile-copy approach (copying Chrome profile to temp dir) was tried and abandoned — Chrome keeps session cookies in memory while running, so the copy is always missing the active login.
+- Cart is tied to the browser session — if the browser closes, the cart is lost. The bot NEVER closes the browser after a confirmed cart add.
+- After clicking "Add Area to stay", the bot verifies via `/api/cart` that a booking actually exists server-side (polls up to 10x). DOM changes alone are not reliable confirmation.
+- Previously tried: CDP (Chrome blocks it on default data dir), profile-copy (session cookies are in-memory only).
 
 ### Test Timer
 - GUI has a "Test Timer" checkbox that sets the target to 1 minute from now instead of the real booking time. Use this for end-to-end testing without waiting for 7 AM.
