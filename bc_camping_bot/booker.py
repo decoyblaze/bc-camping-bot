@@ -92,7 +92,6 @@ async def load_session(context_factory, booking: Booking):
 
 
 CHROME_USER_DATA = str(Path.home() / "Library/Application Support/Google/Chrome")
-CDP_PORT = 9222
 
 
 def is_chrome_running() -> bool:
@@ -104,83 +103,52 @@ def is_chrome_running() -> bool:
         return False
 
 
-def _restart_chrome_with_cdp(profile: str = "Default", log=None):
-    """Gracefully quit Chrome and relaunch with remote debugging enabled.
-
-    Chrome restores all tabs automatically on relaunch.
-    """
+def quit_chrome(log=None):
+    """Gracefully quit Chrome and wait for it to exit."""
     import subprocess
     import time
 
     if log:
-        log("Restarting Chrome with remote debugging...")
-
+        log("Closing Chrome (will reopen when done)...")
     subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to quit'],
                    capture_output=True, timeout=10)
-
     for _ in range(30):
         if not is_chrome_running():
-            break
-        time.sleep(0.2)
-
-    chrome_app = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    subprocess.Popen(
-        [chrome_app, f"--remote-debugging-port={CDP_PORT}",
-         "--restore-last-session", f"--profile-directory={profile}"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-
-    for _ in range(50):
-        try:
-            import urllib.request
-            urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json/version", timeout=1)
             return
-        except Exception:
-            time.sleep(0.2)
-    raise RuntimeError("Chrome did not start with remote debugging in time")
+        time.sleep(0.2)
+    raise RuntimeError("Chrome did not quit in time")
 
 
-def _chrome_has_cdp() -> bool:
-    """Check if the running Chrome already has CDP enabled."""
-    try:
-        import urllib.request
-        urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json/version", timeout=1)
-        return True
-    except Exception:
-        return False
+def reopen_chrome():
+    """Reopen Chrome normally (restores tabs)."""
+    import subprocess
+    subprocess.Popen(["open", "-a", "Google Chrome"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 async def launch_with_chrome_profile(pw, profile: str = "Default", log=None):
-    """Connect to the user's Chrome via CDP.
+    """Launch Playwright using the user's Chrome profile directly.
 
-    If Chrome isn't running or doesn't have CDP: (re)launches Chrome with
-    --remote-debugging-port, then connects. Chrome restores all tabs.
+    If Chrome is running, gracefully quits it first (sessions flush to disk).
+    Uses launch_persistent_context on the real profile so all cookies/login
+    are intact. Call reopen_chrome() when done.
 
-    Returns (context, page) tuple. The page is a new tab in the user's
-    real Chrome session — fully logged in, all cookies intact.
+    Returns (context, page) tuple.
     """
-    if not is_chrome_running():
-        import subprocess
-        chrome_app = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-        subprocess.Popen(
-            [chrome_app, f"--remote-debugging-port={CDP_PORT}",
-             f"--profile-directory={profile}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        import time
-        for _ in range(50):
-            try:
-                import urllib.request
-                urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json/version", timeout=1)
-                break
-            except Exception:
-                time.sleep(0.2)
-    elif not _chrome_has_cdp():
-        _restart_chrome_with_cdp(profile, log=log)
+    if is_chrome_running():
+        quit_chrome(log=log)
 
-    browser = await pw.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
-    context = browser.contexts[0]
-    page = await context.new_page()
+    config = get_stealth_config()
+    context = await pw.chromium.launch_persistent_context(
+        user_data_dir=CHROME_USER_DATA,
+        channel="chrome",
+        headless=False,
+        viewport=config["viewport"],
+        locale=config["locale"],
+        timezone_id=config["timezone_id"],
+        args=[f"--profile-directory={profile}"],
+    )
+    page = context.pages[0] if context.pages else await context.new_page()
     return context, page
 
 

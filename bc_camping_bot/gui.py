@@ -617,6 +617,7 @@ class Api:
             launch_with_chrome_profile,
             load_session,
             pre_navigate,
+            reopen_chrome,
         )
         from .notify import notify
         from .timesync import get_ntp_offset, precise_time, wait_until
@@ -626,20 +627,21 @@ class Api:
         async with async_playwright() as pw:
             browser = None
             if use_chrome:
-                self._log(f"Connecting to Chrome (profile '{chrome_profile}')...")
+                self._log(f"Launching with Chrome profile '{chrome_profile}'...")
                 try:
                     context, page = await launch_with_chrome_profile(pw, profile=chrome_profile, log=self._log)
                 except Exception as e:
-                    self._error(f"Failed to connect to Chrome: {e}")
+                    self._error(f"Failed to launch Chrome profile: {e}")
                     return
                 await apply_stealth(page)
-                self._success("Connected — new tab opened in your Chrome.")
+                self._success("Chrome profile loaded — logged in.")
             else:
                 browser = await pw.chromium.launch(headless=False)
                 context = await load_session(browser.new_context, booking)
                 page = await context.new_page()
                 await apply_stealth(page)
 
+            added_to_cart = False
             try:
                 # ── Test Run: skip timing, run the full bot flow immediately ──
                 if test_run:
@@ -734,56 +736,99 @@ class Api:
                 self._status("Booking NOW...", "running")
                 t_start = _time.monotonic()
 
+                # ── CRITICAL: Add to stay (this is the booking) ──
+                from .api_booker import verify_cart_has_booking
+                added_to_cart = False
                 try:
-                    # At 7 AM: fire Search immediately (refreshes availability, DOM already built)
                     search_btn = page.get_by_role("button", name="Search for availability")
                     await search_btn.click()
-                    add_btn = page.get_by_role("button", name="Add Area to stay")
-                    await add_btn.wait_for(state="visible", timeout=15000)
-                    await add_btn.click()
-                    t_added = _time.monotonic()
-                    self._success(f"IN CART! ({t_added - t_start:.2f}s)")
 
-                    # Click Reserve — no delay
-                    reserve_btn = page.get_by_role("button", name=re.compile(r"^Reserve Area:"))
-                    await reserve_btn.wait_for(state="visible", timeout=10000)
+                    add_btn = page.get_by_role("button", name="Add Area to stay")
+                    for attempt in range(5):
+                        try:
+                            await add_btn.wait_for(state="visible", timeout=30000)
+                            break
+                        except Exception:
+                            self._log(f"Add button not visible (attempt {attempt+1}/5), re-clicking Search...")
+                            await search_btn.click()
+                    await add_btn.click()
+                    t_clicked = _time.monotonic()
+                    self._log(f"Clicked 'Add Area to stay' ({t_clicked - t_start:.2f}s) — verifying cart...")
+
+                    # Verify via API that the booking is actually in the cart
+                    for check in range(10):
+                        if await verify_cart_has_booking(page):
+                            added_to_cart = True
+                            break
+                        await asyncio.sleep(1)
+                    t_verified = _time.monotonic()
+
+                    if added_to_cart:
+                        self._success(f"IN CART! (verified via API in {t_verified - t_start:.2f}s)")
+                        notify("Camping Bot", f"IN CART in {t_verified - t_start:.2f}s! {booking.park}")
+                    else:
+                        self._error("Add clicked but cart API shows no booking — may not have gone through")
+                        self._status("UNCERTAIN — check browser manually", "waiting")
+                        notify("Camping Bot", f"Cart uncertain for {booking.park} — check browser!")
+                except Exception as e:
+                    self._error(f"Failed to add to cart: {e}")
+                    self._status("FAILED — Add to stay", "error")
+                    notify("Camping Bot", f"FAILED to add to cart: {booking.park}")
+
+                if not added_to_cart:
+                    # Nothing in cart — safe to close browser
+                    if browser:
+                        await browser.close()
+                    else:
+                        await context.close()
+                    return
+
+                # ── BEST EFFORT: Reserve + Checkout ──
+                # If anything below fails, browser stays open for manual completion.
+                # Cart is tied to this browser session — NEVER close it.
+                try:
                     await reserve_btn.click()
                     t_reserved = _time.monotonic()
                     self._success(f"Reserved! ({t_reserved - t_start:.2f}s)")
-                    # Dismiss Park Alerts if it pops up (non-blocking, minimal timeout)
+
                     try:
                         dialog = page.get_by_role("dialog", name="Park Alerts")
-                        if await dialog.is_visible(timeout=200):
+                        if await dialog.is_visible(timeout=300):
                             await dialog.get_by_role("button", name="Acknowledge").click()
                     except Exception:
                         pass
 
                     t_cart = _time.monotonic() - t_start
-                    self._log(f"=== IN CART: {t_cart:.2f}s ===")
 
                     if full_checkout:
                         self._log("--- Starting checkout ---")
                         from .booker import complete_checkout
                         await complete_checkout(page, self._log)
                         t_total = _time.monotonic() - t_start
-                        self._log(f"=== GRAND TOTAL: {t_total:.2f}s (cart: {t_cart:.2f}s + checkout: {t_total - t_cart:.2f}s) ===")
+                        self._log(f"=== TOTAL: {t_total:.2f}s (cart: {t_cart:.2f}s + checkout: {t_total - t_cart:.2f}s) ===")
                         self._success("BOOKING COMPLETE!")
                         self._status(f"BOOKED! (cart: {t_cart:.1f}s, total: {t_total:.1f}s)", "success")
                         notify("Camping Bot", f"Booked {booking.park}! Cart: {t_cart:.1f}s, Total: {t_total:.1f}s")
                     else:
                         self._success("ADDED TO CART! You have ~15 min to checkout.")
-                        self._status(f"IN CART ({t_total:.1f}s) — checkout in browser!", "success")
-                        notify("Camping Bot", f"{booking.park} in cart in {t_total:.1f}s! Checkout now!")
-                    await asyncio.sleep(1800)
+                        self._status(f"IN CART ({t_cart:.1f}s) — checkout in browser!", "success")
+                        notify("Camping Bot", f"{booking.park} in cart in {t_cart:.1f}s! Checkout now!")
                 except Exception as e:
-                    self._error(f"Failed: {e}")
-                    self._status("Failed", "error")
-                    notify("Camping Bot", f"FAILED: {booking.park}")
+                    self._error(f"Auto-checkout failed: {e}")
+                    self._log(">>> IT'S IN YOUR CART — finish checkout manually in the browser! <<<")
+                    self._status("IN CART — finish checkout manually!", "waiting")
+                    notify("Camping Bot", f"IN CART but auto-checkout failed — finish manually!")
+
+                # Keep browser open indefinitely — cart is in this session
+                self._log("Browser will stay open. Close it manually when done.")
+                while True:
+                    await asyncio.sleep(60)
             finally:
-                if browser:
-                    await browser.close()
-                else:
-                    await context.close()
+                if not added_to_cart:
+                    if browser:
+                        await browser.close()
+                    else:
+                        await context.close()
 
     # ── API Mode ──────────────────────────────────────────────
 
@@ -796,7 +841,7 @@ class Api:
         from playwright.async_api import async_playwright
 
         from .api_booker import api_add_to_cart, install_request_hook, get_captured_requests
-        from .booker import launch_with_chrome_profile, load_session
+        from .booker import launch_with_chrome_profile, load_session, reopen_chrome
         from .notify import notify
         from .timesync import get_ntp_offset, precise_time, wait_until
 
@@ -805,14 +850,14 @@ class Api:
         async with async_playwright() as pw:
             browser = None
             if use_chrome:
-                self._log(f"Connecting to Chrome (profile '{chrome_profile}')...")
+                self._log(f"Launching with Chrome profile '{chrome_profile}'...")
                 try:
                     context, page = await launch_with_chrome_profile(pw, profile=chrome_profile, log=self._log)
                 except Exception as e:
-                    self._error(f"Failed to connect to Chrome: {e}")
+                    self._error(f"Failed to launch Chrome profile: {e}")
                     return
                 await apply_stealth(page)
-                self._success("Connected — new tab opened in your Chrome.")
+                self._success("Chrome profile loaded — logged in.")
             else:
                 browser = await pw.chromium.launch(headless=False)
                 context = await load_session(browser.new_context, booking)
@@ -972,6 +1017,9 @@ class Api:
                     await browser.close()
                 else:
                     await context.close()
+                if use_chrome:
+                    reopen_chrome()
+                    self._log("Chrome reopened.")
 
     # ── Stop ──────────────────────────────────────────────────
 

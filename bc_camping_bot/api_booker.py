@@ -283,6 +283,23 @@ async def get_captured_requests(page) -> list:
     return await page.evaluate("() => window.__capturedPosts || []")
 
 
+async def verify_cart_has_booking(page) -> bool:
+    """Check /api/cart to see if there's a booking in the cart."""
+    result = await page.evaluate("""
+    async () => {
+        try {
+            const resp = await fetch('/api/cart');
+            if (!resp.ok) return false;
+            const cart = await resp.json();
+            return !!(cart.bookings && cart.bookings.length > 0);
+        } catch(e) {
+            return false;
+        }
+    }
+    """)
+    return result
+
+
 async def api_add_to_cart(page, booking: Booking, log_fn=None) -> dict:
     """Add campsite to cart via fetch() calls inside the browser page.
 
