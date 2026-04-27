@@ -13,7 +13,6 @@ dependencies = [
     "ntplib>=0.4.0",
     "rich>=13.0.0",
     "pywebview>=4.0",
-    "httpx[http2]>=0.27.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -69,9 +69,10 @@ CLI alternative: `.venv/bin/book --force`
 - Default method: "Use my Chrome profile" — if Chrome is running, gracefully quits it (sessions flush to disk), uses the profile directly via `launch_persistent_context`, then reopens Chrome when done. All cookies/login intact.
 - GUI has a "Chrome Profile" dropdown that auto-discovers profiles from `~/Library/Application Support/Google/Chrome/` and pre-selects the one with a signed-in Google account.
 - Alternative: "Save separate login session" — opens browser, user logs in, saves cookies/storage state to JSON.
-- Cart is tied to the browser session — if the browser closes, the cart is lost. The bot NEVER closes the browser after a confirmed cart add.
-- After clicking "Add Area to stay", the bot verifies via `/api/cart` that a booking actually exists server-side (polls up to 10x). DOM changes alone are not reliable confirmation.
-- Previously tried: CDP (Chrome blocks it on default data dir), profile-copy (session cookies are in-memory only).
+- Cart is tied to the browser session — if the browser closes, the cart is lost. The bot NEVER closes the browser after the booking flow starts.
+- **The bot's #1 job is Add to stay.** A human cannot do this fast enough at 7 AM. The full Search → Add → Verify cycle retries up to 10 times. Verification = Reserve button appearing (confirms server accepted the cart add). The `/api/cart` endpoint does NOT reflect DOM-added bookings.
+- Everything after Add to stay (Reserve, checkout) is best effort. If it fails, the bot keeps the browser open and the user finishes manually.
+- Previously tried: CDP (Chrome blocks it on default data dir), profile-copy (session cookies are in-memory only), `/api/cart` verification (doesn't track UI-added bookings).
 
 ### Test Timer
 - GUI has a "Test Timer" checkbox that sets the target to 1 minute from now instead of the real booking time. Use this for end-to-end testing without waiting for 7 AM.
@@ -84,47 +85,12 @@ CLI alternative: `.venv/bin/book --force`
 - Don't match the Reserve button by exact name — it's dynamic. Use regex.
 - Don't rely on manual checkout at 7 AM — site is too slow. Use Full Checkout mode.
 
-## API Mode ("Nuclear Fast")
-
-`bc_camping_bot/api_booker.py` — Direct HTTP calls bypassing all browser DOM interaction.
-
-### How it works
-1. Browser opens just to warm session + extract cookies
-2. At 7 AM, fires `GET /api/cart` to get cart UIDs
-3. Builds cart commit payload with client-generated `bookingUid` + `resourceZoneBlockerUid` UUIDs
-4. Fires `POST /api/cart/commit?isCompleted=false&isSelfCheckIn=false` — one request = in cart
-5. If Full Checkout: switches to browser for Reserve + 6 checkout steps (these are multi-step forms)
-
-### Key API details
-- `/api/cart` — returns `cartUid`, `createTransactionUid`, `newTransaction` (with `shiftUid`, `userUid`)
-- `/api/cart/commit` — POST with full cart payload including `bookings[]` and `resourceZoneBlockers[]`
-- `bookingUid` and `resourceZoneBlockerUid` are client-generated UUIDs (uuid4)
-- `resourceId` for Taylor Meadows is `-2147481158` (all Garibaldi campsites mapped in `CAMPSITE_RESOURCE_IDS`)
-- `bookingCategoryId=4`, `bookingModel=5` for backcountry reservations
-- `peopleCapacityCategoryId=-32764`, sub-categories: adult=-32761, youth=-32760, child=-32759
-- `equipmentCapacityCategoryId=-32766` (tent pads)
-
-### Fallback
-If the API call fails, the bot automatically falls back to browser mode (navigates to results URL, uses `add_to_cart()` from booker.py which handles Search-click retries + proper wait-for-option logic).
-
-### Debugging: capture_real_commit_payload()
-`api_booker.py` has a `capture_real_commit_payload(page)` function that intercepts the real fetch request the frontend sends when clicking "Add Area to stay". Use this to compare the real payload vs our constructed one if the API returns 400.
-
-### Lessons from API mode debugging (2026-04-25)
-- **Raw httpx gets 403** — must use `page.evaluate()` with JS `fetch()` to inherit browser session cookies/headers
-- **API calls from homepage get 400** — must navigate to results page and click Search first to initialize cart context
-- **Payload must spread the full cart response** (`...cart`, `...newTxn`) — cherry-picking fields misses server-validated fields. Override only what changes.
-- **`isAdult` should be `null`** in bookingCapacityCategoryCounts, not `true`/`false`
-- **`completedDate` should be `null`** for new bookings, not `newTxn.createDate`
-- **Browser fallback must use `add_to_cart()`** from booker.py — manually waiting for "Add Area to stay" before selecting area is wrong order (button only appears after area selected)
-
 ## Dependencies
 - playwright (browser automation)
 - pywebview (desktop GUI)
 - pyyaml (config)
 - ntplib (time sync)
 - rich (CLI formatting)
-- httpx (HTTP/2 client for API mode)
 
 ## Park IDs (in booker.py)
 Currently only Garibaldi is configured. To add parks, add entries to `PARK_IDS` dict with `transactionLocationId`, `resourceLocationId`, and `mapId` from the BC Parks site.

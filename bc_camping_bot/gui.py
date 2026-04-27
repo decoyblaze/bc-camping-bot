@@ -218,8 +218,6 @@ HTML = """
       <select id="mode">
         <option value="cart" selected>Add to Cart (you checkout manually)</option>
         <option value="full">Full Checkout (bot completes purchase)</option>
-        <option value="api">API Mode (nuclear fast — experimental)</option>
-        <option value="api_full">API Mode + Full Checkout</option>
       </select>
     </div>
     <div class="field">
@@ -525,10 +523,9 @@ class Api:
             data = self._get_form_data()
             mode = data.get("mode", "cart")
             test_timer = data.get("test_timer", False)
-            api_mode = mode in ("api", "api_full")
-            full_checkout = mode in ("full", "api_full")
+            full_checkout = mode == "full"
             self._run_bot(test_run=False, full_checkout=full_checkout,
-                          test_timer=test_timer, api_mode=api_mode)
+                          test_timer=test_timer)
         except Exception as e:
             import traceback
             self._error(f"start_bot crashed: {e}")
@@ -537,7 +534,7 @@ class Api:
     def test_run(self):
         self._run_bot(test_run=True, full_checkout=False)
 
-    def _run_bot(self, test_run, full_checkout, test_timer=False, api_mode=False):
+    def _run_bot(self, test_run, full_checkout, test_timer=False):
         data = self._get_form_data()
         try:
             booking = self._build_booking(data)
@@ -557,8 +554,6 @@ class Api:
         self._set_running(True)
         if test_run:
             label = "Test Run"
-        elif api_mode:
-            label = "API Mode" + (" + Full Checkout" if full_checkout else "")
         elif full_checkout:
             label = "Full Checkout"
         else:
@@ -579,18 +574,11 @@ class Api:
             loop = asyncio.new_event_loop()
             self._worker_loop = loop
             try:
-                if api_mode and not test_run:
-                    loop.run_until_complete(
-                        self._run_booking_api(booking, full_checkout=full_checkout,
-                                              use_chrome=use_chrome, test_timer=test_timer,
-                                              chrome_profile=chrome_profile)
-                    )
-                else:
-                    loop.run_until_complete(
-                        self._run_booking(booking, test_run=test_run, full_checkout=full_checkout,
-                                          use_chrome=use_chrome, test_timer=test_timer,
-                                          chrome_profile=chrome_profile)
-                    )
+                loop.run_until_complete(
+                    self._run_booking(booking, test_run=test_run, full_checkout=full_checkout,
+                                      use_chrome=use_chrome, test_timer=test_timer,
+                                      chrome_profile=chrome_profile)
+                )
             except asyncio.CancelledError:
                 self._log("Cancelled.")
                 self._status("Cancelled", "error")
@@ -736,290 +724,92 @@ class Api:
                 self._status("Booking NOW...", "running")
                 t_start = _time.monotonic()
 
-                # ── CRITICAL: Add to stay (this is the booking) ──
-                from .api_booker import verify_cart_has_booking
+                # ══════════════════════════════════════════════════════
+                # ADD TO STAY — the bot's entire reason for existing.
+                # Uses add_to_cart() which handles Search → select area → Add.
+                # Retries the full cycle aggressively — up to 10 attempts.
+                # ══════════════════════════════════════════════════════
+                from .booker import add_to_cart
                 added_to_cart = False
-                try:
-                    search_btn = page.get_by_role("button", name="Search for availability")
-                    await search_btn.click()
+                reserve_btn = None
 
-                    add_btn = page.get_by_role("button", name="Add Area to stay")
-                    for attempt in range(5):
-                        try:
-                            await add_btn.wait_for(state="visible", timeout=30000)
-                            break
-                        except Exception:
-                            self._log(f"Add button not visible (attempt {attempt+1}/5), re-clicking Search...")
-                            await search_btn.click()
-                    await add_btn.click()
-                    t_clicked = _time.monotonic()
-                    self._log(f"Clicked 'Add Area to stay' ({t_clicked - t_start:.2f}s) — verifying cart...")
-
-                    # Verify via API that the booking is actually in the cart
-                    for check in range(10):
-                        if await verify_cart_has_booking(page):
-                            added_to_cart = True
-                            break
-                        await asyncio.sleep(1)
-                    t_verified = _time.monotonic()
-
-                    if added_to_cart:
-                        self._success(f"IN CART! (verified via API in {t_verified - t_start:.2f}s)")
-                        notify("Camping Bot", f"IN CART in {t_verified - t_start:.2f}s! {booking.park}")
-                    else:
-                        self._error("Add clicked but cart API shows no booking — may not have gone through")
-                        self._status("UNCERTAIN — check browser manually", "waiting")
-                        notify("Camping Bot", f"Cart uncertain for {booking.park} — check browser!")
-                except Exception as e:
-                    self._error(f"Failed to add to cart: {e}")
-                    self._status("FAILED — Add to stay", "error")
-                    notify("Camping Bot", f"FAILED to add to cart: {booking.park}")
-
-                if not added_to_cart:
-                    # Nothing in cart — safe to close browser
-                    if browser:
-                        await browser.close()
-                    else:
-                        await context.close()
-                    return
-
-                # ── BEST EFFORT: Reserve + Checkout ──
-                # If anything below fails, browser stays open for manual completion.
-                # Cart is tied to this browser session — NEVER close it.
-                try:
-                    await reserve_btn.click()
-                    t_reserved = _time.monotonic()
-                    self._success(f"Reserved! ({t_reserved - t_start:.2f}s)")
-
+                for cycle in range(10):
                     try:
-                        dialog = page.get_by_role("dialog", name="Park Alerts")
-                        if await dialog.is_visible(timeout=300):
-                            await dialog.get_by_role("button", name="Acknowledge").click()
-                    except Exception:
-                        pass
+                        if cycle > 0:
+                            self._log(f"--- Retry cycle {cycle+1}/10 ---")
+                        await add_to_cart(page, booking.campsite, self._log)
+                        t_added = _time.monotonic()
+                        self._log(f"Add to stay clicked ({t_added - t_start:.2f}s)")
 
-                    t_cart = _time.monotonic() - t_start
+                        reserve_btn = page.get_by_role("button", name=re.compile(r"^Reserve Area:"))
+                        await reserve_btn.wait_for(state="visible", timeout=30000)
+                        t_confirmed = _time.monotonic()
+                        added_to_cart = True
+                        self._success(f"IN CART! ({t_confirmed - t_start:.2f}s)")
+                        notify("Camping Bot", f"IN CART in {t_confirmed - t_start:.2f}s! {booking.park}")
+                        break
+                    except Exception as e:
+                        self._error(f"Attempt {cycle+1} failed: {e}")
+                        if cycle < 9:
+                            self._log("Retrying...")
+                        else:
+                            self._error("All 10 attempts exhausted.")
+                            self._log(">>> Check the browser — you may need to add to cart manually. <<<")
+                            notify("Camping Bot", f"FAILED to add to cart after 10 attempts: {booking.park}")
 
-                    if full_checkout:
-                        self._log("--- Starting checkout ---")
-                        from .booker import complete_checkout
-                        await complete_checkout(page, self._log)
-                        t_total = _time.monotonic() - t_start
-                        self._log(f"=== TOTAL: {t_total:.2f}s (cart: {t_cart:.2f}s + checkout: {t_total - t_cart:.2f}s) ===")
-                        self._success("BOOKING COMPLETE!")
-                        self._status(f"BOOKED! (cart: {t_cart:.1f}s, total: {t_total:.1f}s)", "success")
-                        notify("Camping Bot", f"Booked {booking.park}! Cart: {t_cart:.1f}s, Total: {t_total:.1f}s")
-                    else:
-                        self._success("ADDED TO CART! You have ~15 min to checkout.")
-                        self._status(f"IN CART ({t_cart:.1f}s) — checkout in browser!", "success")
-                        notify("Camping Bot", f"{booking.park} in cart in {t_cart:.1f}s! Checkout now!")
-                except Exception as e:
-                    self._error(f"Auto-checkout failed: {e}")
-                    self._log(">>> IT'S IN YOUR CART — finish checkout manually in the browser! <<<")
-                    self._status("IN CART — finish checkout manually!", "waiting")
-                    notify("Camping Bot", f"IN CART but auto-checkout failed — finish manually!")
-
-                # Keep browser open indefinitely — cart is in this session
-                self._log("Browser will stay open. Close it manually when done.")
-                while True:
-                    await asyncio.sleep(60)
-            finally:
-                if not added_to_cart:
-                    if browser:
-                        await browser.close()
-                    else:
-                        await context.close()
-
-    # ── API Mode ──────────────────────────────────────────────
-
-    async def _run_booking_api(self, booking, full_checkout, use_chrome=False, test_timer=False, chrome_profile="Default"):
-        """Nuclear fast mode: direct HTTP API calls for add-to-cart, browser only for checkout."""
-        self._worker_task = asyncio.current_task()
-        import time as _time
-        from datetime import timedelta as td
-
-        from playwright.async_api import async_playwright
-
-        from .api_booker import api_add_to_cart, install_request_hook, get_captured_requests
-        from .booker import launch_with_chrome_profile, load_session, reopen_chrome
-        from .notify import notify
-        from .timesync import get_ntp_offset, precise_time, wait_until
-
-        ntp_offset = get_ntp_offset()
-
-        async with async_playwright() as pw:
-            browser = None
-            if use_chrome:
-                self._log(f"Launching with Chrome profile '{chrome_profile}'...")
-                try:
-                    context, page = await launch_with_chrome_profile(pw, profile=chrome_profile, log=self._log)
-                except Exception as e:
-                    self._error(f"Failed to launch Chrome profile: {e}")
-                    return
-                await apply_stealth(page)
-                self._success("Chrome profile loaded — logged in.")
-            else:
-                browser = await pw.chromium.launch(headless=False)
-                context = await load_session(browser.new_context, booking)
-                page = await context.new_page()
-                await apply_stealth(page)
-
-            try:
-                from .booker import build_results_url, pre_navigate
-
-                # Install JS request hooks before any navigation
-                await install_request_hook(page, self._log)
-
-                # Warm session + navigate to results page (initializes cart context)
-                self._log("Warming session on camping.bcparks.ca...")
-                await page.goto("https://camping.bcparks.ca", wait_until="domcontentloaded")
-                self._success("Session warm.")
-
-                self._log("Pre-loading results page (initializes cart context)...")
-                await pre_navigate(page, booking)
-                self._success("Results page loaded. Cart context ready.")
-
-                # Click Search to fully initialize the booking state
-                search_btn = page.get_by_role("button", name="Search for availability")
-                await search_btn.click()
-                try:
-                    combo = page.get_by_role("combobox", name="Available Areas")
-                    await combo.wait_for(state="visible", timeout=15000)
-                    self._success("Search triggered. API ready to fire.")
-                except Exception:
-                    self._log("Available Areas dropdown not visible yet (normal before booking window).")
-
-                if test_timer:
-                    target = precise_time(ntp_offset) + td(seconds=60)
-                    self._log(f"TEST TIMER: target set to {target.strftime('%H:%M:%S')}")
-                else:
-                    target = booking.booking_opens_at
-
-                remaining = (target - precise_time(ntp_offset)).total_seconds()
-                if remaining > 0:
-                    self._log(f"Waiting {remaining:.0f}s for target time...")
-                    self._status(f"API mode standing by ({remaining:.0f}s)...", "waiting")
-                    wait_until(target, ntp_offset)
-
-                self._success("GO! Firing API calls...")
-                self._status("API booking NOW...", "running")
-                t_start = _time.monotonic()
-
-                try:
-                    result = await api_add_to_cart(page, booking, self._log)
-                    t_cart = _time.monotonic() - t_start
-                    self._success(f"IN CART via API! ({t_cart:.3f}s)")
-                    self._log(f"=== API CART: {t_cart:.3f}s ===")
-
-                    if full_checkout:
-                        self._log("Switching to browser for checkout...")
-                        # Reload the page in the browser to pick up the cart state
-                        from .booker import build_results_url
-                        await page.goto(
-                            "https://camping.bcparks.ca/create-booking/cart",
-                            wait_until="domcontentloaded",
-                        )
-
-                        # Click Reserve in browser
-                        reserve_btn = page.get_by_role("button", name=re.compile(r"^Reserve Area:|^Reserve$"))
-                        await reserve_btn.wait_for(state="visible", timeout=15000)
+                # ══════════════════════════════════════════════════════
+                # EVERYTHING BELOW IS BEST EFFORT.
+                # The booking is in the cart — that's the hard part done.
+                # If anything fails here, the browser stays open and
+                # the user finishes manually. No exceptions, no crashes.
+                # ══════════════════════════════════════════════════════
+                if added_to_cart and reserve_btn:
+                    try:
                         await reserve_btn.click()
                         t_reserved = _time.monotonic()
                         self._success(f"Reserved! ({t_reserved - t_start:.2f}s)")
 
-                        # Dismiss Park Alerts
                         try:
                             dialog = page.get_by_role("dialog", name="Park Alerts")
-                            if await dialog.is_visible(timeout=200):
+                            if await dialog.is_visible(timeout=300):
                                 await dialog.get_by_role("button", name="Acknowledge").click()
                         except Exception:
                             pass
 
-                        from .booker import complete_checkout
-                        await complete_checkout(page, self._log)
-                        t_total = _time.monotonic() - t_start
-                        self._log(f"=== GRAND TOTAL: {t_total:.2f}s (API cart: {t_cart:.3f}s) ===")
-                        self._success("BOOKING COMPLETE!")
-                        self._status(f"BOOKED! (API cart: {t_cart:.3f}s, total: {t_total:.1f}s)", "success")
-                        notify("Camping Bot", f"API BOOKED {booking.park}! Cart: {t_cart:.3f}s")
-                    else:
-                        self._success(f"IN CART via API ({t_cart:.3f}s)! You have ~15 min to checkout.")
-                        self._status(f"API: IN CART ({t_cart:.3f}s) — checkout in browser!", "success")
-                        notify("Camping Bot", f"API: {booking.park} in cart in {t_cart:.3f}s!")
-
-                    await asyncio.sleep(1800)
-                except Exception as e:
-                    t_fail = _time.monotonic() - t_start
-                    self._error(f"API mode failed ({t_fail:.2f}s): {e}")
-                    # Dump debug: get captured requests from JS hooks
-                    try:
-                        captured = await page.evaluate("() => window.__capturedPosts || []")
-                        debug = {"error": str(e), "captured_posts": captured}
-                        debug_path = self._data_dir / "api_debug.json"
-                        debug_path.write_text(json.dumps(debug, indent=2))
-                        self._log(f"Debug saved to {debug_path} ({len(captured)} requests)")
-                    except Exception as dbg_err:
-                        self._log(f"Debug dump failed: {dbg_err}")
-                    self._log("Falling back to browser mode...")
-                    self._status("API failed — trying browser mode...", "running")
-
-                    # Fallback: use the browser mode (reuse add_to_cart which handles retries)
-                    try:
-                        from .booker import (
-                            add_to_cart,
-                            build_results_url,
-                            select_area_and_reserve,
-                        )
-
-                        results_url = build_results_url(booking)
-                        await page.goto(results_url, wait_until="domcontentloaded")
-                        await add_to_cart(page, booking.campsite, self._log)
-
                         t_cart = _time.monotonic() - t_start
-                        self._success(f"IN CART via browser fallback! ({t_cart:.2f}s)")
 
                         if full_checkout:
-                            reserve_btn = page.get_by_role("button", name=re.compile(r"^Reserve Area:"))
-                            await reserve_btn.wait_for(state="visible", timeout=10000)
-                            await reserve_btn.click()
-                            try:
-                                dialog = page.get_by_role("dialog", name="Park Alerts")
-                                if await dialog.is_visible(timeout=200):
-                                    await dialog.get_by_role("button", name="Acknowledge").click()
-                            except Exception:
-                                pass
+                            self._log("--- Starting checkout ---")
                             from .booker import complete_checkout
                             await complete_checkout(page, self._log)
                             t_total = _time.monotonic() - t_start
-                            self._success(f"BOOKED via fallback! ({t_total:.2f}s)")
-                            self._status(f"BOOKED via fallback ({t_total:.1f}s)", "success")
-                            notify("Camping Bot", f"Booked {booking.park} (fallback) in {t_total:.1f}s")
+                            self._log(f"=== TOTAL: {t_total:.2f}s (cart: {t_cart:.2f}s + checkout: {t_total - t_cart:.2f}s) ===")
+                            self._success("BOOKING COMPLETE!")
+                            self._status(f"BOOKED! (cart: {t_cart:.1f}s, total: {t_total:.1f}s)", "success")
+                            notify("Camping Bot", f"Booked {booking.park}! Cart: {t_cart:.1f}s, Total: {t_total:.1f}s")
                         else:
-                            self._status(f"IN CART via fallback ({t_cart:.1f}s)", "success")
-                            notify("Camping Bot", f"{booking.park} in cart (fallback) {t_cart:.1f}s")
+                            self._success("IN CART! You have ~15 min to checkout.")
+                            self._status(f"IN CART ({t_cart:.1f}s) — checkout in browser!", "success")
+                            notify("Camping Bot", f"{booking.park} in cart in {t_cart:.1f}s! Checkout now!")
+                    except Exception as e:
+                        self._error(f"Auto-checkout failed: {e}")
+                        self._log(">>> IT'S IN YOUR CART — finish checkout manually in the browser! <<<")
+                        self._status("IN CART — finish checkout manually!", "waiting")
+                        notify("Camping Bot", f"IN CART but auto-checkout failed — finish manually!")
 
-                        await asyncio.sleep(1800)
-                    except Exception as e2:
-                        self._error(f"Browser fallback also failed: {e2}")
-                        self._status("Failed", "error")
-                        notify("Camping Bot", f"FAILED: {booking.park}")
-                    finally:
-                        try:
-                            captured = await get_captured_requests(page)
-                            if captured:
-                                dump_path = self._data_dir / "captured_payload.json"
-                                dump_path.write_text(json.dumps(captured, indent=2))
-                                self._success(f"Saved {len(captured)} captured request(s) → {dump_path}")
-                        except Exception:
-                            pass
-            finally:
-                if browser:
-                    await browser.close()
-                else:
-                    await context.close()
-                if use_chrome:
-                    reopen_chrome()
-                    self._log("Chrome reopened.")
+                # Browser ALWAYS stays open — never close it after booking flow starts
+                self._log("Browser will stay open. Close it manually when done.")
+                while True:
+                    await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                self._log("Cancelled.")
+                self._status("Cancelled", "error")
+            except Exception as e:
+                self._error(f"Unexpected error: {e}")
+                self._log("Browser will stay open. Close it manually when done.")
+                self._status("Error — check browser", "error")
+                while True:
+                    await asyncio.sleep(60)
 
     # ── Stop ──────────────────────────────────────────────────
 
