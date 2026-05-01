@@ -850,7 +850,7 @@ class Api:
                         self._log(f"Add to stay clicked ({t_added - t_start:.2f}s)")
 
                         reserve_btn = page.get_by_role("button", name=re.compile(r"^Reserve Area:"))
-                        await reserve_btn.wait_for(state="visible", timeout=30000)
+                        await reserve_btn.wait_for(state="visible", timeout=60000)
                         t_confirmed = _time.monotonic()
                         added_to_cart = True
                         self._success(f"IN CART! ({t_confirmed - t_start:.2f}s)")

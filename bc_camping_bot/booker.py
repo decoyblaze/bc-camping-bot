@@ -595,7 +595,7 @@ async def complete_checkout(page: Page, log_fn=None) -> bool:
     import time as _time
     _log = log_fn or (lambda x: None)
     t0 = _time.monotonic()
-    T = 10000
+    T = 45000
 
     # Step 1: check box and confirm reservation details
     checkbox = page.get_by_role("checkbox", name="All reservation details are correct.")

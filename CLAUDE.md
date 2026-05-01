@@ -83,7 +83,9 @@ CLI alternative: `.venv/bin/book --force`
 - **Manual checkout is not viable at 7 AM.** The site is too slammed for pages to load. Use Full Checkout mode so the bot clicks through all 6 steps automatically.
 - **Cart is tied to browser session, not account.** Can't checkout on a different device/browser. The bot must complete checkout in the same Playwright browser that added to cart.
 - **The "Available Areas" dropdown NEVER appears without clicking Search first.** Always click Search — don't wait for it to appear on its own.
-- **First real run took 8.44s to Add to stay, 13.31s total.** Server load at 7 AM is the bottleneck, not code speed.
+- **First real run (2026-04-25) took 8.44s to Add to stay, 13.31s total.** Server load at 7 AM is the bottleneck, not code speed.
+- **Second real run (2026-05-01) — backcountry: 0.39s to Add to stay, 27.48s for "IN CART" confirmation.** Add-to-stay was near-instant but server took 27s to confirm. Checkout step 2 ("Proceed to checkout") timed out at 10s — increased all checkout timeouts to 45s.
+- **Cart ghost at 7 AM**: after Reserve, clicking the cart icon may show empty. Navigating away and back forces a refresh and the item appears. This is a BC Parks UI bug under load — the item IS in the cart server-side.
 - **Use Chrome profile, not saved session.** Freshest cookies, better anti-detection. Bot auto-closes Chrome, uses profile, reopens when done.
 - **Test runs show 0.11–0.31s to cart** — code is optimized, server response is the variable.
 - **Frontcountry test runs show 3.31–5.76s to Reserve** — includes map interaction + fallback sites. First site unavailable adds ~2-4s (marker click + Reserve timeout).
