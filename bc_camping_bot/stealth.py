@@ -7,12 +7,6 @@ WebGL renderer, and general browser fingerprint consistency.
 
 import random
 
-VIEWPORTS = [
-    {"width": 1440, "height": 900},
-    {"width": 1536, "height": 864},
-    {"width": 1920, "height": 1080},
-]
-
 USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -82,10 +76,8 @@ STEALTH_JS = """
 
 
 def get_stealth_config():
-    viewport = random.choice(VIEWPORTS)
     user_agent = random.choice(USER_AGENTS)
     return {
-        "viewport": viewport,
         "user_agent": user_agent,
         "locale": "en-CA",
         "timezone_id": "America/Vancouver",

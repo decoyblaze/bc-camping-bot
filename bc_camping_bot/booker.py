@@ -7,10 +7,13 @@ Speed strategy (sub-1-second from booking window open):
 4. Form-based fallback if direct URL approach fails
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 from datetime import date, datetime
 from pathlib import Path
+from typing import Optional
 from urllib.parse import quote
 
 from playwright.async_api import Page
@@ -32,6 +35,131 @@ BACKCOUNTRY_RESERVATION = {
     "searchTabGroupId": 3,
     "bookingCategoryId": 4,
     "peopleCapacityCategoryId": -32764,
+}
+
+FRONTCOUNTRY_PARKS = {
+    "Alice Lake": {
+        "transactionLocationId": -2147483647,
+        "resourceLocationId": -2147483647,
+        "mapId": -2147483648,
+        "areas": {
+            "A (Sites 1-55)": -2147483647,
+            "B (Sites 56-96)": -2147483646,
+            "Walk-In": -2147483645,
+        },
+    },
+    "Birkenhead Lake": {
+        "transactionLocationId": -2147483639,
+        "resourceLocationId": -2147483640,
+        "mapId": -2147483631,
+        "areas": {},
+    },
+    "Chilliwack Lake": {
+        "transactionLocationId": -2147483621,
+        "resourceLocationId": -2147483627,
+        "mapId": -2147483619,
+        "areas": {
+            "Greendrop Loop": -2147483618,
+            "Lindeman Loop": -2147483617,
+            "Paleface Loop": -2147483616,
+            "Radium Loop": -2147483615,
+            "Flora Loop": -2147483614,
+        },
+    },
+    "Cultus Lake": {
+        "transactionLocationId": -2147483617,
+        "resourceLocationId": -2147483623,
+        "mapId": -2147483610,
+        "areas": {
+            "Entrance Bay": -2147483609,
+            "Clear Creek": -2147483608,
+            "Delta Grove": -2147483607,
+            "Maple Bay": -2147483606,
+        },
+    },
+    "Golden Ears": {
+        "transactionLocationId": -2147483599,
+        "resourceLocationId": -2147483606,
+        "mapId": -2147483576,
+        "areas": {
+            "Alouette North": -2147483575,
+            "Alouette South": -2147483574,
+            "Gold Creek": -2147483573,
+            "North Beach": -2147483572,
+        },
+    },
+    "Inland Lake": {
+        "transactionLocationId": -2147483591,
+        "resourceLocationId": -2147483599,
+        "mapId": -2147483554,
+        "areas": {
+            "Campground": -2147483553,
+        },
+    },
+    "Nairn Falls": {
+        "transactionLocationId": -2147483544,
+        "resourceLocationId": -2147483564,
+        "mapId": -2147483471,
+        "areas": {},
+    },
+    "Porpoise Bay": {
+        "transactionLocationId": -2147483517,
+        "resourceLocationId": -2147483551,
+        "mapId": -2147483452,
+        "areas": {
+            "Campground": -2147483451,
+        },
+    },
+    "Porteau Cove": {
+        "transactionLocationId": -2147483516,
+        "resourceLocationId": -2147483550,
+        "mapId": -2147483449,
+        "areas": {
+            "A (Sites 1-37)": -2147483448,
+            "B (Sites 38-44)": -2147483447,
+            "WalkIn (W1-W16)": -2147483446,
+        },
+    },
+    "Rolley Lake": {
+        "transactionLocationId": -2147483509,
+        "resourceLocationId": -2147483543,
+        "mapId": -2147483430,
+        "areas": {
+            "Campground": -2147483429,
+            "Walk-in": -2147483251,
+        },
+    },
+    "Saltery Bay": {
+        "transactionLocationId": -2147483506,
+        "resourceLocationId": -2147483540,
+        "mapId": -2147483422,
+        "areas": {
+            "Campground": -2147483421,
+        },
+    },
+    "Sasquatch": {
+        "transactionLocationId": -2147483505,
+        "resourceLocationId": -2147483539,
+        "mapId": -2147483420,
+        "areas": {
+            "Hicks Campground": -2147483419,
+            "Bench Campground": -2147483418,
+            "Lakeside Campground": -2147483417,
+        },
+    },
+    "Silver Lake": {
+        "transactionLocationId": -2147483501,
+        "resourceLocationId": -2147483535,
+        "mapId": -2147483410,
+        "areas": {},
+    },
+}
+
+FRONTCOUNTRY_RESERVATION = {
+    "searchTabGroupId": 0,
+    "bookingCategoryId": 0,
+    "equipmentId": -32768,
+    "subEquipmentId": -32768,
 }
 
 
@@ -73,6 +201,185 @@ def build_results_url(booking: Booking) -> str:
     return f"{BOOKING_URL}/create-booking/results?{params}"
 
 
+def build_frontcountry_url(booking: Booking, area_map_id: int) -> str:
+    """Build the direct results URL for a frontcountry campsite area."""
+    park = FRONTCOUNTRY_PARKS.get(booking.park)
+    if not park:
+        raise ValueError(
+            f"Unknown frontcountry park '{booking.park}'. "
+            f"Known: {list(FRONTCOUNTRY_PARKS.keys())}"
+        )
+
+    start = booking.arrival_date.isoformat()
+    end = booking.departure_date.isoformat()
+    now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000")
+    fc = FRONTCOUNTRY_RESERVATION
+
+    params = (
+        f"transactionLocationId={park['transactionLocationId']}"
+        f"&resourceLocationId={park['resourceLocationId']}"
+        f"&mapId={area_map_id}"
+        f"&searchTabGroupId={fc['searchTabGroupId']}"
+        f"&bookingCategoryId={fc['bookingCategoryId']}"
+        f"&startDate={start}"
+        f"&endDate={end}"
+        f"&nights={booking.num_nights}"
+        f"&isReserving=true"
+        f"&equipmentId={fc['equipmentId']}"
+        f"&subEquipmentId={fc['subEquipmentId']}"
+        f"&searchTime={now}"
+        f"&flexibleSearch={quote('[false,false,null,1]')}"
+    )
+    return f"{BOOKING_URL}/create-booking/results?{params}"
+
+
+async def select_equipment(page: Page, equipment_label: str, log_fn=None):
+    """Select equipment type from the page's Equipment dropdown.
+
+    The URL always loads with '1 Tent' selected. This function changes it
+    to the user's selection before Search is clicked.
+    """
+    import re as _re
+    _log = log_fn or (lambda x: None)
+    combo = page.get_by_role("combobox", name=_re.compile(
+        r"(Tent|Van|Camper|Trailer|RV)", _re.IGNORECASE
+    ))
+    try:
+        await combo.click(timeout=5000)
+        option = page.get_by_role("option", name=equipment_label)
+        await option.click(timeout=3000)
+        _log(f"Equipment set to {equipment_label}")
+    except Exception:
+        _log(f"Could not change equipment to {equipment_label}")
+
+
+async def frontcountry_find_sites(page: Page, site_names: list[str]) -> dict[str, str]:
+    """Batch-find SVG IDs for all sites in one evaluate call.
+
+    Returns {site_name: svg_id} for sites found on the map.
+    """
+    return await page.evaluate("""(siteNames) => {
+        const map = {};
+        const labels = document.querySelectorAll('.map-site-label');
+        for (const name of siteNames) {
+            const target = name.toUpperCase();
+            for (const lbl of labels) {
+                const child = lbl.querySelector('[id$="-label"]');
+                if (child && child.textContent?.trim().toUpperCase() === target) {
+                    map[name] = child.id.replace('-label', '');
+                    break;
+                }
+            }
+        }
+        return map;
+    }""", site_names)
+
+
+async def frontcountry_click_site(page: Page, site_name: str, log_fn=None, svg_id: str = None) -> bool:
+    """Click a campsite marker on the map to open its details panel."""
+    _log = log_fn or (lambda x: None)
+
+    if not svg_id:
+        result = await frontcountry_find_sites(page, [site_name])
+        svg_id = result.get(site_name)
+
+    if not svg_id:
+        _log(f"Site {site_name} not found on map")
+        return False
+
+    marker = page.locator(f'[id="{svg_id}"]').locator('..')
+    await marker.click()
+    _log(f"Clicked site {site_name}")
+    return True
+
+
+async def frontcountry_reserve_site(
+    page: Page, site_name: str, log_fn=None, timeout: int = 2000, svg_id: str = None
+) -> bool:
+    """Click a campsite marker, then click Reserve in the details panel."""
+    import time as _time
+    _log = log_fn or (lambda x: None)
+
+    t0 = _time.monotonic()
+    if not await frontcountry_click_site(page, site_name, _log, svg_id=svg_id):
+        return False
+    _log(f"  details panel opening... ({_time.monotonic() - t0:.2f}s)")
+
+    reserve_btn = page.get_by_role("button", name="Reserve", exact=True)
+    try:
+        await reserve_btn.wait_for(state="attached", timeout=timeout)
+        await reserve_btn.scroll_into_view_if_needed()
+        await reserve_btn.click()
+        _log(f"  Reserve clicked for {site_name}! ({_time.monotonic() - t0:.2f}s)")
+        return True
+    except Exception:
+        _log(f"  no Reserve button for {site_name} ({_time.monotonic() - t0:.2f}s)")
+        return False
+
+
+async def frontcountry_add_to_cart(
+    page: Page,
+    booking: Booking,
+    area_map_id: int,
+    sites: list[str],
+    log_fn=None,
+    pre_clicked: bool = False,
+) -> Optional[str]:
+    """Try to reserve a frontcountry campsite from a priority-ordered list.
+
+    Pre-condition: page is already on the area results URL with assets cached.
+    At 7 AM: clicks Search to refresh availability, then tries each site in order.
+
+    Returns the site name that was reserved, or None if all failed.
+    """
+    import time as _time
+    _log = log_fn or (lambda x: None)
+
+    t0 = _time.monotonic()
+    try:
+        await click_search_button(page, _log)
+        _log(f"  Search clicked ({_time.monotonic() - t0:.2f}s)")
+    except Exception:
+        _log(f"  Search button not clickable ({_time.monotonic() - t0:.2f}s)")
+        return None
+
+    labels_exist = await page.query_selector('.map-site-label')
+    if not labels_exist:
+        try:
+            await page.wait_for_selector('.map-site-label', timeout=15000)
+        except Exception:
+            _log(f"  Map labels never appeared ({_time.monotonic() - t0:.2f}s)")
+            return None
+    _log(f"  Map ready ({_time.monotonic() - t0:.2f}s)")
+
+    site_ids = await frontcountry_find_sites(page, sites)
+    _log(f"  Found {len(site_ids)}/{len(sites)} sites ({_time.monotonic() - t0:.2f}s)")
+
+    for i, site in enumerate(sites):
+        _log(f"Trying site {site}... ({_time.monotonic() - t0:.2f}s)")
+        if i == 0 and pre_clicked:
+            reserve_btn = page.get_by_role("button", name="Reserve", exact=True)
+            try:
+                await reserve_btn.wait_for(state="attached", timeout=2000)
+                await reserve_btn.scroll_into_view_if_needed()
+                await reserve_btn.click()
+                _log(f"  Reserve clicked for {site}! ({_time.monotonic() - t0:.2f}s)")
+                _log(f"RESERVED {site}! ({_time.monotonic() - t0:.2f}s)")
+                return site
+            except Exception:
+                _log(f"  fast-path Reserve failed for {site} ({_time.monotonic() - t0:.2f}s)")
+        svg_id = site_ids.get(site)
+        if not svg_id:
+            _log(f"  {site} not found on map ({_time.monotonic() - t0:.2f}s)")
+            continue
+        if await frontcountry_reserve_site(page, site, _log, svg_id=svg_id):
+            _log(f"RESERVED {site}! ({_time.monotonic() - t0:.2f}s)")
+            return site
+
+    _log(f"All {len(sites)} sites failed ({_time.monotonic() - t0:.2f}s)")
+    return None
+
+
 async def load_session(context_factory, booking: Booking):
     """Create a browser context with a saved session."""
     session_path = Path(booking.session_file)
@@ -83,7 +390,7 @@ async def load_session(context_factory, booking: Booking):
     config = get_stealth_config()
     context = await context_factory(
         storage_state=session_data["storage_state"],
-        viewport=config["viewport"],
+        no_viewport=True,
         user_agent=config["user_agent"],
         locale=config["locale"],
         timezone_id=config["timezone_id"],
@@ -143,7 +450,7 @@ async def launch_with_chrome_profile(pw, profile: str = "Default", log=None):
         user_data_dir=CHROME_USER_DATA,
         channel="chrome",
         headless=False,
-        viewport=config["viewport"],
+        no_viewport=True,
         locale=config["locale"],
         timezone_id=config["timezone_id"],
         args=[f"--profile-directory={profile}"],

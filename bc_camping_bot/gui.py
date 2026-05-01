@@ -151,20 +151,97 @@ HTML = """
   <div class="card">
     <h2>Booking Details</h2>
     <div class="field">
-      <label>Park</label>
-      <select id="park">
-        <option selected>Garibaldi</option>
-        <option>Berg Lake Trail</option>
-        <option>Cathedral</option>
-        <option>E. C. Manning</option>
-        <option>Joffre Lakes</option>
-        <option>Mount Assiniboine</option>
+      <label>Booking Type</label>
+      <select id="booking_type" onchange="toggleBookingType()">
+        <option value="backcountry">Backcountry</option>
+        <option value="frontcountry" selected>Frontcountry / Campsite</option>
       </select>
     </div>
-    <div class="field">
-      <label>Campsite / Area</label>
-      <input id="campsite" value="Taylor Meadows" placeholder="e.g. Taylor Meadows or 'any'">
+
+    <!-- Backcountry fields -->
+    <div id="bc_fields" style="display:none">
+      <div class="field">
+        <label>Park</label>
+        <select id="park">
+          <option selected>Garibaldi</option>
+          <option>Berg Lake Trail</option>
+          <option>Cathedral</option>
+          <option>E. C. Manning</option>
+          <option>Joffre Lakes</option>
+          <option>Mount Assiniboine</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Campsite / Area</label>
+        <input id="campsite" value="Taylor Meadows" placeholder="e.g. Taylor Meadows or 'any'">
+      </div>
+      <div class="field">
+        <label>Party Size</label>
+        <input id="people" type="number" value="2" min="1" max="20" style="width:80px;flex:none">
+      </div>
+      <div class="field">
+        <label>Tent Pads</label>
+        <input id="pads" type="number" value="1" min="1" max="10" style="width:80px;flex:none">
+      </div>
+      <div class="field">
+        <label>Equipment</label>
+        <select id="equipment">
+          <option selected>tent</option>
+          <option>tarp</option>
+          <option>hammock</option>
+        </select>
+      </div>
     </div>
+
+    <!-- Frontcountry fields -->
+    <div id="fc_fields">
+      <div class="field">
+        <label>Park</label>
+        <select id="fc_park" onchange="updateFcAreas()">
+          FC_PARK_OPTIONS
+        </select>
+      </div>
+      <div class="field" id="fc_area_row">
+        <label>Area</label>
+        <select id="fc_area">
+          <option value="">Loading...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Primary Site</label>
+        <input id="fc_site1" value="" placeholder="e.g. E19">
+      </div>
+      <div class="field">
+        <label>Fallback 2</label>
+        <input id="fc_site2" value="" placeholder="e.g. E20 (optional)">
+      </div>
+      <div class="field">
+        <label>Fallback 3</label>
+        <input id="fc_site3" value="" placeholder="e.g. E21 (optional)">
+      </div>
+      <div class="field">
+        <label>Fallback 4</label>
+        <input id="fc_site4" value="" placeholder="(optional)">
+      </div>
+      <div class="field">
+        <label>Fallback 5</label>
+        <input id="fc_site5" value="" placeholder="(optional)">
+      </div>
+      <div class="field">
+        <label>Equipment</label>
+        <select id="fc_equipment">
+          <option value="-32768" selected>1 Tent</option>
+          <option value="-32767">2 Tents</option>
+          <option value="-32766">3 Tents</option>
+          <option value="-32765">Van/Camper</option>
+          <option value="-32764">Trailer up to 18ft</option>
+          <option value="-32763">Trailer or RV up to 32ft</option>
+          <option value="-32762">Trailer or RV over 32ft</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Shared fields -->
     <div class="field">
       <label>Arrival Date</label>
       <input id="arrival" type="date" value="2026-07-25">
@@ -178,22 +255,6 @@ HTML = """
       <input id="nights" type="number" value="1" min="1" max="14" style="width:80px;flex:none">
     </div>
     <div class="field">
-      <label>Party Size</label>
-      <input id="people" type="number" value="6" min="1" max="20" style="width:80px;flex:none">
-    </div>
-    <div class="field">
-      <label>Tent Pads</label>
-      <input id="pads" type="number" value="3" min="1" max="10" style="width:80px;flex:none">
-    </div>
-    <div class="field">
-      <label>Equipment</label>
-      <select id="equipment">
-        <option selected>tent</option>
-        <option>tarp</option>
-        <option>hammock</option>
-      </select>
-    </div>
-    <div class="field">
       <label>Booking Opens</label>
       <input id="booking_date" type="date" value="2026-04-25">
       <span class="hint" id="booking_hint">7:00 AM PT on Apr 25</span>
@@ -201,8 +262,8 @@ HTML = """
     <div class="field">
       <label>Login Method</label>
       <select id="login_method" onchange="toggleLoginFields()">
-        <option value="chrome" selected>Use my Chrome profile (easiest)</option>
-        <option value="session">Save separate login session</option>
+        <option value="chrome">Use my Chrome profile</option>
+        <option value="session" selected>Save separate login session</option>
       </select>
     </div>
     <div class="field" id="chrome_profile_row">
@@ -282,6 +343,36 @@ HTML = """
     arrivalEl.addEventListener('change', () => { updateDeparture(); updateBookingDate(); });
     nightsEl.addEventListener('change', updateDeparture);
 
+    const FC_AREAS = FC_AREAS_JSON;
+
+    function toggleBookingType() {
+      const bt = document.getElementById('booking_type').value;
+      document.getElementById('bc_fields').style.display = bt === 'backcountry' ? '' : 'none';
+      document.getElementById('fc_fields').style.display = bt === 'frontcountry' ? '' : 'none';
+    }
+    toggleBookingType();
+
+    function updateFcAreas() {
+      const park = document.getElementById('fc_park').value;
+      const areaSelect = document.getElementById('fc_area');
+      const areas = FC_AREAS[park] || {};
+      const areaRow = document.getElementById('fc_area_row');
+      areaSelect.innerHTML = '';
+      const keys = Object.keys(areas);
+      if (keys.length === 0) {
+        areaRow.style.display = 'none';
+      } else {
+        areaRow.style.display = 'flex';
+        keys.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = areas[name];
+          opt.textContent = name;
+          areaSelect.appendChild(opt);
+        });
+      }
+    }
+    updateFcAreas();
+
     function toggleLoginFields() {
       const method = document.getElementById('login_method').value;
       document.getElementById('chrome_profile_row').style.display = method === 'chrome' ? 'flex' : 'none';
@@ -291,15 +382,12 @@ HTML = """
     toggleLoginFields();
 
     function getFormData() {
-      return {
-        park: document.getElementById('park').value,
-        campsite: document.getElementById('campsite').value,
+      const bt = document.getElementById('booking_type').value;
+      const base = {
+        booking_type: bt,
         arrival: arrivalEl.value,
         departure: departureEl.value,
         nights: parseInt(nightsEl.value),
-        people: parseInt(document.getElementById('people').value),
-        pads: parseInt(document.getElementById('pads').value),
-        equipment: document.getElementById('equipment').value,
         booking_date: bookingEl.value,
         session_name: document.getElementById('session_name').value,
         mode: document.getElementById('mode').value,
@@ -307,6 +395,27 @@ HTML = """
         chrome_profile: document.getElementById('chrome_profile').value,
         test_timer: document.getElementById('test_timer').checked,
       };
+      if (bt === 'backcountry') {
+        base.park = document.getElementById('park').value;
+        base.campsite = document.getElementById('campsite').value;
+        base.people = parseInt(document.getElementById('people').value);
+        base.pads = parseInt(document.getElementById('pads').value);
+        base.equipment = document.getElementById('equipment').value;
+      } else {
+        base.park = document.getElementById('fc_park').value;
+        base.fc_area = document.getElementById('fc_area').value;
+        base.fc_equipment = document.getElementById('fc_equipment').value;
+        const sites = [];
+        for (let i = 1; i <= 5; i++) {
+          const v = document.getElementById('fc_site' + i).value.trim();
+          if (v) sites.push(v);
+        }
+        base.fc_sites = sites;
+        base.people = 1;
+        base.pads = 0;
+        base.equipment = 'tent';
+      }
+      return base;
     }
 
     window.getFormData = getFormData;
@@ -431,22 +540,25 @@ class Api:
         return self._window.evaluate_js("getFormData()")
 
     def _build_booking(self, data):
-        session_name = data["session_name"].strip() or "default"
+        session_name = data.get("session_name", "").strip() or "default"
         if not session_name.endswith(".json"):
             session_name += ".json"
 
         arrival = date.fromisoformat(data["arrival"])
         booking_date = date.fromisoformat(data["booking_date"]) if data.get("booking_date") else None
 
+        is_fc = data.get("booking_type") == "frontcountry"
+        campsite = data.get("fc_sites", [""])[0] if is_fc else (data.get("campsite", "").strip() or "any")
+
         return Booking(
-            name=f"{data['park']} — {data['campsite']}",
+            name=f"{data['park']} — {campsite}",
             park=data["park"],
-            campsite=data["campsite"].strip() or "any",
+            campsite=campsite,
             arrival_date=arrival,
             num_nights=data["nights"],
-            num_people=data["people"],
-            num_tent_pads=data["pads"],
-            equipment_type=data["equipment"],
+            num_people=data.get("people", 1),
+            num_tent_pads=data.get("pads", 0),
+            equipment_type=data.get("equipment", "tent"),
             session_file=str(self._data_dir / "sessions" / session_name),
             booking_date=booking_date,
         )
@@ -471,25 +583,28 @@ class Api:
         self._worker_thread = threading.Thread(target=run, daemon=True)
         self._worker_thread.start()
 
+    def _session_profile_dir(self, data):
+        session_name = data.get("session_name", "").strip() or "default"
+        session_name = session_name.replace(".json", "")
+        profile_dir = self._data_dir / "browser-profiles" / session_name
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        return profile_dir
+
     async def _save_session_async(self, data):
-        session_name = data["session_name"].strip() or "default"
-        if not session_name.endswith(".json"):
-            session_name += ".json"
-        output_path = self._data_dir / "sessions" / session_name
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        profile_dir = self._session_profile_dir(data)
         config = get_stealth_config()
 
         from playwright.async_api import async_playwright
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
-            context = await browser.new_context(
-                viewport=config["viewport"],
-                user_agent=config["user_agent"],
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=str(profile_dir),
+                headless=False,
+                no_viewport=True,
                 locale=config["locale"],
                 timezone_id=config["timezone_id"],
             )
-            page = await context.new_page()
+            page = context.pages[0] if context.pages else await context.new_page()
             await apply_stealth(page)
 
             self._log("Navigating to camping.bcparks.ca...")
@@ -504,14 +619,9 @@ class Api:
             self._login_done.wait()
             self._log_queue.put(("show_confirm", False))
 
-            cookies = await context.cookies()
-            storage = await context.storage_state()
-            session_data = {"cookies": cookies, "storage_state": storage}
-            output_path.write_text(json.dumps(session_data, indent=2))
-
-            self._success(f"Session saved: {session_name}")
+            self._success(f"Login saved to {profile_dir.name} — will persist across runs.")
             self._status("Login saved!", "success")
-            await browser.close()
+            await context.close()
 
     def confirm_login(self):
         self._login_done.set()
@@ -546,10 +656,12 @@ class Api:
         chrome_profile = data.get("chrome_profile", "Default")
 
         if not use_chrome:
-            session_path = Path(booking.session_file)
-            if not session_path.exists():
+            profile_dir = self._session_profile_dir(data)
+            if not (profile_dir / "Default").exists():
                 self._error("No saved login found. Click '1. Save Login' first.")
                 return
+
+        is_fc = data.get("booking_type") == "frontcountry"
 
         self._set_running(True)
         if test_run:
@@ -558,10 +670,21 @@ class Api:
             label = "Full Checkout"
         else:
             label = "Add to Cart"
+        if is_fc:
+            label = f"Frontcountry {label}"
         self._status(f"{label} in progress...", "running")
         self._log(f"--- {label} ---")
         self._log(f"  Park: {booking.park}")
-        self._log(f"  Campsite: {booking.campsite}")
+        if is_fc:
+            sites = data.get("fc_sites", [])
+            self._log(f"  Sites: {', '.join(sites)}")
+            eq_labels = {"-32768": "1 Tent", "-32767": "2 Tents", "-32766": "3 Tents",
+                         "-32765": "Van/Camper", "-32764": "Trailer ≤18ft",
+                         "-32763": "Trailer/RV ≤32ft", "-32762": "Trailer/RV >32ft"}
+            eq_val = str(data.get("fc_equipment", "-32768"))
+            self._log(f"  Equipment: {eq_labels.get(eq_val, eq_val)}")
+        else:
+            self._log(f"  Campsite: {booking.campsite}")
         self._log(f"  Arrival: {booking.arrival_date}")
         if not test_run:
             if test_timer:
@@ -577,7 +700,7 @@ class Api:
                 loop.run_until_complete(
                     self._run_booking(booking, test_run=test_run, full_checkout=full_checkout,
                                       use_chrome=use_chrome, test_timer=test_timer,
-                                      chrome_profile=chrome_profile)
+                                      chrome_profile=chrome_profile, session_data=data)
                 )
             except asyncio.CancelledError:
                 self._log("Cancelled.")
@@ -594,7 +717,7 @@ class Api:
         self._worker_thread = threading.Thread(target=run, daemon=True)
         self._worker_thread.start()
 
-    async def _run_booking(self, booking, test_run, full_checkout, use_chrome=False, test_timer=False, chrome_profile="Default"):
+    async def _run_booking(self, booking, test_run, full_checkout, use_chrome=False, test_timer=False, chrome_profile="Default", session_data=None):
         self._worker_task = asyncio.current_task()
         from datetime import timedelta as td
 
@@ -603,7 +726,6 @@ class Api:
         from .booker import (
             build_results_url,
             launch_with_chrome_profile,
-            load_session,
             pre_navigate,
             reopen_chrome,
         )
@@ -624,39 +746,39 @@ class Api:
                 await apply_stealth(page)
                 self._success("Chrome profile loaded — logged in.")
             else:
-                browser = await pw.chromium.launch(headless=False)
-                context = await load_session(browser.new_context, booking)
-                page = await context.new_page()
+                profile_dir = self._session_profile_dir(session_data or {})
+                self._log(f"Launching saved session ({profile_dir.name})...")
+                config = get_stealth_config()
+                context = await pw.chromium.launch_persistent_context(
+                    user_data_dir=str(profile_dir),
+                    headless=False,
+                    no_viewport=True,
+                    locale=config["locale"],
+                    timezone_id=config["timezone_id"],
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
                 await apply_stealth(page)
+                self._success("Saved session loaded.")
 
+            is_fc = (session_data or {}).get("booking_type") == "frontcountry"
             added_to_cart = False
             try:
-                # ── Test Run: skip timing, run the full bot flow immediately ──
+                if is_fc:
+                    await self._run_frontcountry_flow(
+                        page, booking, session_data, test_run, full_checkout,
+                        test_timer, ntp_offset, build_results_url, pre_navigate,
+                        precise_time, wait_until, notify, td,
+                    )
+                    return
+
+                # ── Backcountry Test Run ──
                 if test_run:
                     import time as _time
-                    import sys as _sys
-
-                    print("[TEST RUN] Starting...", file=_sys.stderr, flush=True)
                     self._log("Going straight to results page...")
                     t0 = _time.monotonic()
                     results_url = build_results_url(booking)
                     await page.goto(results_url, wait_until="domcontentloaded")
                     self._success(f"Results page loaded. ({_time.monotonic()-t0:.1f}s)")
-                    print("[TEST RUN] Results page loaded", file=_sys.stderr, flush=True)
-
-                    # Capture ALL requests via Playwright's native event listener
-                    self._log("Setting up request capture...")
-                    captured_payloads = []
-                    def on_request(request):
-                        if request.method == "POST":
-                            captured_payloads.append({
-                                "url": request.url,
-                                "method": request.method,
-                                "body": request.post_data,
-                            })
-                            print(f"[CAPTURED] POST {request.url}", file=_sys.stderr, flush=True)
-                            self._log(f"CAPTURED: POST {request.url.split('?')[0]}")
-                    page.on("request", on_request)
 
                     self._log("Selecting area + Add to stay + Reserve...")
                     t1 = _time.monotonic()
@@ -664,18 +786,9 @@ class Api:
                         from .booker import select_area_and_reserve
                         await select_area_and_reserve(page, booking.campsite, self._log)
                         self._success(f"IN CART! ({_time.monotonic()-t1:.1f}s)")
-                        print("[TEST RUN] IN CART!", file=_sys.stderr, flush=True)
                     except Exception as e:
                         self._error(f"Reserve FAILED ({_time.monotonic()-t1:.1f}s): {e}")
                         self._log("(Expected if booking window isn't open yet)")
-                        print(f"[TEST RUN] FAILED: {e}", file=_sys.stderr, flush=True)
-
-                    page.remove_listener("request", on_request)
-
-                    dump_path = self._data_dir / "captured_payload.json"
-                    dump_path.write_text(json.dumps(captured_payloads, indent=2))
-                    self._log(f"Captured {len(captured_payloads)} POST request(s) → {dump_path}")
-                    print(f"[TEST RUN] Saved {len(captured_payloads)} requests to {dump_path}", file=_sys.stderr, flush=True)
 
                     total = _time.monotonic() - t0
                     self._log(f"=== TOTAL: {total:.1f}s ===")
@@ -684,7 +797,7 @@ class Api:
                     await asyncio.sleep(15)
                     return
 
-                # ── Real Run: timing + pre-load + attempts ──
+                # ── Backcountry Real Run ──
                 if test_timer:
                     target = precise_time(ntp_offset) + td(seconds=60)
                     self._log(f"TEST TIMER: target set to {target.strftime('%H:%M:%S')}")
@@ -724,11 +837,6 @@ class Api:
                 self._status("Booking NOW...", "running")
                 t_start = _time.monotonic()
 
-                # ══════════════════════════════════════════════════════
-                # ADD TO STAY — the bot's entire reason for existing.
-                # Uses add_to_cart() which handles Search → select area → Add.
-                # Retries the full cycle aggressively — up to 10 attempts.
-                # ══════════════════════════════════════════════════════
                 from .booker import add_to_cart
                 added_to_cart = False
                 reserve_btn = None
@@ -757,12 +865,6 @@ class Api:
                             self._log(">>> Check the browser — you may need to add to cart manually. <<<")
                             notify("Camping Bot", f"FAILED to add to cart after 10 attempts: {booking.park}")
 
-                # ══════════════════════════════════════════════════════
-                # EVERYTHING BELOW IS BEST EFFORT.
-                # The booking is in the cart — that's the hard part done.
-                # If anything fails here, the browser stays open and
-                # the user finishes manually. No exceptions, no crashes.
-                # ══════════════════════════════════════════════════════
                 if added_to_cart and reserve_btn:
                     try:
                         await reserve_btn.click()
@@ -811,6 +913,160 @@ class Api:
                 while True:
                     await asyncio.sleep(60)
 
+    # ── Frontcountry Flow ─────────────────────────────────────
+
+    async def _run_frontcountry_flow(
+        self, page, booking, session_data, test_run, full_checkout,
+        test_timer, ntp_offset, build_results_url, pre_navigate,
+        precise_time, wait_until, notify, td,
+    ):
+        import time as _time
+        from .booker import (
+            FRONTCOUNTRY_PARKS,
+            build_frontcountry_url,
+            frontcountry_add_to_cart,
+            dismiss_cookie_consent,
+            click_search_button,
+            select_equipment,
+        )
+
+        sites = session_data.get("fc_sites", [])
+        if not sites:
+            self._error("No campsite numbers specified.")
+            return
+
+        area_map_id = int(session_data.get("fc_area", 0))
+        park = FRONTCOUNTRY_PARKS.get(booking.park)
+        if not park:
+            self._error(f"Unknown frontcountry park: {booking.park}")
+            return
+
+        if not area_map_id:
+            area_map_id = park["mapId"]
+
+        eq_labels = {"-32768": "1 Tent", "-32767": "2 Tents", "-32766": "3 Tents",
+                     "-32765": "Van/Camper", "-32764": "Trailer up to 18ft",
+                     "-32763": "Trailer or RV up to 32ft", "-32762": "Trailer or RV over 32ft"}
+        eq_val = str(session_data.get("fc_equipment", "-32768"))
+        equipment_label = eq_labels.get(eq_val, "1 Tent")
+
+        area_url = build_frontcountry_url(booking, area_map_id)
+
+        if test_run:
+            t0 = _time.monotonic()
+            self._log(f"Navigating to area page... ({_time.monotonic()-t0:.2f}s)")
+            await page.goto(area_url, wait_until="domcontentloaded")
+            await dismiss_cookie_consent(page)
+            if equipment_label != "1 Tent":
+                await select_equipment(page, equipment_label, self._log)
+            await page.wait_for_selector('.map-site-label', timeout=15000)
+            self._success(f"Area page loaded, map visible ({_time.monotonic()-t0:.2f}s)")
+
+            self._log(f"Sites to try: {', '.join(sites)}")
+            reserved = await frontcountry_add_to_cart(page, booking, area_map_id, sites, self._log)
+            if reserved:
+                self._success(f"RESERVED site {reserved}! ({_time.monotonic()-t0:.2f}s)")
+            else:
+                self._error(f"Could not reserve any site ({_time.monotonic()-t0:.2f}s)")
+                self._log("(Expected if booking window isn't open or sites unavailable)")
+
+            self._log(f"=== TOTAL: {_time.monotonic()-t0:.2f}s ===")
+            self._success("Test complete. Browser stays open for 15s.")
+            self._status("Test complete", "success")
+            await asyncio.sleep(15)
+            return
+
+        # ── Real frontcountry run ──
+        if test_timer:
+            target = precise_time(ntp_offset) + td(seconds=60)
+            self._log(f"TEST TIMER: target set to {target.strftime('%H:%M:%S')}")
+        else:
+            target = booking.booking_opens_at
+        remaining = (target - precise_time(ntp_offset)).total_seconds()
+
+        if remaining > 120:
+            self._log("Warming session...")
+            await page.goto("https://camping.bcparks.ca", wait_until="domcontentloaded")
+            await dismiss_cookie_consent(page)
+            self._success("Session warm.")
+            pre_target = target - td(seconds=60)
+            wait_pre = (pre_target - precise_time(ntp_offset)).total_seconds()
+            if wait_pre > 0:
+                self._log(f"Waiting {wait_pre:.0f}s before pre-loading area...")
+                self._status("Waiting to pre-load...", "waiting")
+                wait_until(pre_target, ntp_offset)
+
+        self._log("Pre-loading area page (caching assets)...")
+        await page.goto(area_url, wait_until="domcontentloaded")
+        await dismiss_cookie_consent(page)
+        if equipment_label != "1 Tent":
+            await select_equipment(page, equipment_label, self._log)
+        self._log("Pre-clicking Search to cache API responses...")
+        await click_search_button(page, self._log)
+        site_pre_clicked = False
+        try:
+            await page.wait_for_selector('.map-site-label', timeout=15000)
+            self._log(f"Pre-selecting site {sites[0]}...")
+            from .booker import frontcountry_click_site
+            if await frontcountry_click_site(page, sites[0], self._log):
+                self._success(f"Details panel open for {sites[0]}. Standing by.")
+                site_pre_clicked = True
+            else:
+                self._log(f"Could not pre-select {sites[0]} — will retry at 7 AM")
+        except Exception:
+            self._log("Map labels not visible yet — will load at 7 AM")
+
+        remaining = (target - precise_time(ntp_offset)).total_seconds()
+        if remaining > 0:
+            self._log(f"Waiting {remaining:.0f}s for 7:00 AM...")
+            self._status(f"Waiting for 7:00 AM PT ({remaining:.0f}s)...", "waiting")
+            wait_until(target, ntp_offset)
+
+        self._success("GO! Booking window open.")
+        self._status("Booking NOW...", "running")
+        t_start = _time.monotonic()
+
+        reserved_site = None
+        for cycle in range(10):
+            if cycle > 0:
+                self._log(f"--- Retry cycle {cycle+1}/10 ---")
+            reserved_site = await frontcountry_add_to_cart(
+                page, booking, area_map_id, sites, self._log,
+                pre_clicked=(cycle == 0 and site_pre_clicked),
+            )
+            if reserved_site:
+                t_cart = _time.monotonic() - t_start
+                self._success(f"RESERVED site {reserved_site}! ({t_cart:.2f}s)")
+                notify("Camping Bot", f"Reserved {reserved_site} at {booking.park} in {t_cart:.2f}s!")
+                break
+            self._error(f"Cycle {cycle+1} — no site reserved")
+            if cycle < 9:
+                self._log("Retrying Search...")
+            else:
+                self._error("All 10 cycles exhausted.")
+                self._log(">>> Check the browser — try manually! <<<")
+                notify("Camping Bot", f"FAILED all sites at {booking.park}")
+
+        if reserved_site and full_checkout:
+            try:
+                self._log("--- Starting checkout ---")
+                from .booker import complete_checkout
+                await complete_checkout(page, self._log)
+                t_total = _time.monotonic() - t_start
+                self._success(f"BOOKING COMPLETE! ({t_total:.2f}s)")
+                self._status(f"BOOKED {reserved_site}! ({t_total:.1f}s)", "success")
+                notify("Camping Bot", f"Booked {reserved_site} at {booking.park}!")
+            except Exception as e:
+                self._error(f"Checkout failed: {e}")
+                self._log(">>> RESERVED — finish checkout manually! <<<")
+                self._status("Reserved — finish checkout manually!", "waiting")
+        elif reserved_site:
+            self._status(f"Reserved {reserved_site} ({t_cart:.1f}s) — checkout in browser!", "success")
+
+        self._log("Browser will stay open. Close it manually when done.")
+        while True:
+            await asyncio.sleep(60)
+
     # ── Stop ──────────────────────────────────────────────────
 
     def stop(self):
@@ -822,7 +1078,7 @@ class Api:
 
 
 def main():
-    default_name = os.environ.get("USER", "default")
+    default_name = "Test"
 
     chrome_data = Path.home() / "Library/Application Support/Google/Chrome"
     profile_options = ""
@@ -849,8 +1105,17 @@ def main():
     if not profile_options:
         profile_options = '<option value="Default">Default</option>'
 
+    from .booker import FRONTCOUNTRY_PARKS
+    fc_park_options = ""
+    fc_areas_dict = {}
+    for park_name, park_data in sorted(FRONTCOUNTRY_PARKS.items()):
+        fc_park_options += f'<option value="{park_name}">{park_name}</option>\n'
+        fc_areas_dict[park_name] = park_data.get("areas", {})
+
     html = HTML.replace("SESSION_NAME_PLACEHOLDER", default_name)
     html = html.replace("CHROME_PROFILE_OPTIONS", profile_options)
+    html = html.replace("FC_PARK_OPTIONS", fc_park_options)
+    html = html.replace("FC_AREAS_JSON", json.dumps(fc_areas_dict))
 
     api = Api()
 
