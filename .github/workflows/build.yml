@@ -63,7 +63,10 @@ jobs:
 
       - name: Create archive (macOS)
         if: runner.os == 'macOS'
-        run: cd dist && zip -r ../${{ matrix.zip_name }} "BC Camping Bot.app"
+        run: |
+          cp "Install BC Camping Bot.command" dist/
+          chmod +x "dist/Install BC Camping Bot.command"
+          cd dist && zip -r ../${{ matrix.zip_name }} "BC Camping Bot.app" "Install BC Camping Bot.command"
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
@@ -100,6 +103,6 @@ jobs:
             - **Windows**: `BC-Camping-Bot-Windows.zip` — unzip and run `BC Camping Bot.exe`
 
             ## First launch
-            - **macOS**: Right-click the app → Open → Open (required once since the app isn't notarized)
+            - **macOS**: Double-click `Install BC Camping Bot.command` — it removes the security block and moves the app to Applications
             - **Windows**: You may need to click "More info" → "Run anyway" on the SmartScreen prompt
             - Both platforms will auto-install the browser engine on first launch (~150 MB one-time download)
