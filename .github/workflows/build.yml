@@ -61,10 +61,7 @@ jobs:
 
       - name: Create archive (macOS)
         if: runner.os == 'macOS'
-        run: |
-          cp "Install BC Camping Bot.command" dist/
-          chmod +x "dist/Install BC Camping Bot.command"
-          cd dist && zip -r ../${{ matrix.zip_name }} "BC Camping Bot.app" "Install BC Camping Bot.command"
+        run: cd dist && zip -r ../${{ matrix.zip_name }} "BC Camping Bot.app"
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
