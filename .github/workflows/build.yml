@@ -57,10 +57,6 @@ jobs:
             --hidden-import plyer.platforms.win.notification \
             run.py
 
-      - name: Sign app (macOS)
-        if: runner.os == 'macOS'
-        run: codesign --force --deep -s - "dist/BC Camping Bot.app"
-
       - name: Create archive (macOS)
         if: runner.os == 'macOS'
         run: |
