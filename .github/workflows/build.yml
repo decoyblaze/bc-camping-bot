@@ -98,11 +98,17 @@ jobs:
             BC-Camping-Bot-Windows.zip
           generate_release_notes: true
           body: |
-            ## Download
-            - **macOS**: `BC-Camping-Bot-macOS.zip` — unzip and move to Applications
-            - **Windows**: `BC-Camping-Bot-Windows.zip` — unzip and run `BC Camping Bot.exe`
+            ## macOS Install
+            Open Terminal and paste:
+            ```
+            curl -sL https://raw.githubusercontent.com/decoyblaze/bc-camping-bot/main/install-mac.sh | bash
+            ```
+            This downloads, installs to Applications, and launches the app. No security warnings.
+
+            ## Windows Install
+            1. Download `BC-Camping-Bot-Windows.zip` below
+            2. Unzip and run `BC Camping Bot.exe`
+            3. If SmartScreen appears, click "More info" → "Run anyway"
 
             ## First launch
-            - **macOS**: Double-click `Install BC Camping Bot.command` — it removes the security block and moves the app to Applications
-            - **Windows**: You may need to click "More info" → "Run anyway" on the SmartScreen prompt
-            - Both platforms will auto-install the browser engine on first launch (~150 MB one-time download)
+            Both platforms will auto-install the browser engine on first launch (~150 MB one-time download).
