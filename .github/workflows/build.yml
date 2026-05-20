@@ -46,6 +46,14 @@ jobs:
             run.py
           find dist -name ".local-browsers" -type d -exec rm -rf {} + 2>/dev/null || true
 
+      - name: Sign app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          find "dist/BC Camping Bot.app" -type f \( -name "*.so" -o -name "*.dylib" \) -exec codesign --force -s - {} \; || true
+          codesign --force -s - "dist/BC Camping Bot.app/Contents/MacOS/BC Camping Bot"
+          codesign --force -s - "dist/BC Camping Bot.app"
+          codesign --verify --deep "dist/BC Camping Bot.app"
+
       - name: Build (Windows)
         if: runner.os == 'Windows'
         shell: bash
