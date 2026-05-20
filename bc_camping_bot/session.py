@@ -24,7 +24,6 @@ async def save_session(output_file: str):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False)
         context = await browser.new_context(
-            viewport=config["viewport"],
             user_agent=config["user_agent"],
             locale=config["locale"],
             timezone_id=config["timezone_id"],

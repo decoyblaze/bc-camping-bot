@@ -1,0 +1,92 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS
+            zip_name: BC-Camping-Bot-macOS.zip
+          - os: windows-latest
+            name: Windows
+            zip_name: BC-Camping-Bot-Windows.zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --noconfirm --name "BC Camping Bot" \
+            --windowed \
+            --collect-all playwright \
+            --hidden-import webview.platforms.cocoa \
+            --hidden-import plyer.platforms.macosx \
+            --hidden-import plyer.platforms.macosx.notification \
+            run.py
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --name "BC Camping Bot" \
+            --windowed \
+            --collect-all playwright \
+            --hidden-import webview.platforms.edgechromium \
+            --hidden-import plyer.platforms.win \
+            --hidden-import plyer.platforms.win.notification \
+            run.py
+
+      - name: Create archive (macOS)
+        if: runner.os == 'macOS'
+        run: cd dist && zip -r ../${{ matrix.zip_name }} "BC Camping Bot.app"
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist\BC Camping Bot" -DestinationPath ${{ matrix.zip_name }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.zip_name }}
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            BC-Camping-Bot-macOS.zip
+            BC-Camping-Bot-Windows.zip
+          generate_release_notes: true

@@ -398,39 +398,14 @@ async def load_session(context_factory, booking: Booking):
     return context
 
 
-CHROME_USER_DATA = str(Path.home() / "Library/Application Support/Google/Chrome")
+from .platform_utils import (
+    chrome_user_data_dir,
+    is_chrome_running,
+    quit_chrome,
+    reopen_chrome,
+)
 
-
-def is_chrome_running() -> bool:
-    import subprocess
-    try:
-        result = subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True)
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-def quit_chrome(log=None):
-    """Gracefully quit Chrome and wait for it to exit."""
-    import subprocess
-    import time
-
-    if log:
-        log("Closing Chrome (will reopen when done)...")
-    subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to quit'],
-                   capture_output=True, timeout=10)
-    for _ in range(30):
-        if not is_chrome_running():
-            return
-        time.sleep(0.2)
-    raise RuntimeError("Chrome did not quit in time")
-
-
-def reopen_chrome():
-    """Reopen Chrome normally (restores tabs)."""
-    import subprocess
-    subprocess.Popen(["open", "-a", "Google Chrome"],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+CHROME_USER_DATA = str(chrome_user_data_dir())
 
 
 async def launch_with_chrome_profile(pw, profile: str = "Default", log=None):
@@ -755,7 +730,8 @@ async def attempt_booking_form(page: Page, booking: Booking, full_checkout: bool
     await date_input.click()
     await human_delay(100, 200)
 
-    target_label = booking.arrival_date.strftime("%B %-d, %Y")
+    from .platform_utils import format_day
+    target_label = format_day(booking.arrival_date, "%B %-d, %Y")
     for _ in range(12):
         try:
             day_btn = page.get_by_role("button", name=target_label)

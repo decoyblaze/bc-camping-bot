@@ -1080,7 +1080,8 @@ class Api:
 def main():
     default_name = "Test"
 
-    chrome_data = Path.home() / "Library/Application Support/Google/Chrome"
+    from .platform_utils import chrome_user_data_dir
+    chrome_data = chrome_user_data_dir()
     profile_options = ""
     for d in sorted(chrome_data.iterdir()):
         if not d.is_dir():
@@ -1128,10 +1129,17 @@ def main():
             api._log("First run — installing browser (one-time)...")
             api._status("Installing browser...", "waiting")
             try:
-                subprocess.run(
-                    [sys.executable, "-m", "playwright", "install", "chromium"],
-                    check=True, capture_output=True, timeout=300,
-                )
+                try:
+                    from playwright._impl._driver import compute_driver_executable, get_driver_env
+                    driver = str(compute_driver_executable())
+                    env = get_driver_env()
+                    subprocess.run([driver, "install", "chromium"],
+                                   check=True, capture_output=True, timeout=300, env=env)
+                except (ImportError, AttributeError):
+                    subprocess.run(
+                        [sys.executable, "-m", "playwright", "install", "chromium"],
+                        check=True, capture_output=True, timeout=300,
+                    )
                 api._success("Browser installed.")
                 api._status("Ready", "ready")
             except Exception as e:

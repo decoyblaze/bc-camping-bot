@@ -1,19 +1,7 @@
-"""Desktop notifications for booking results (macOS)."""
+"""Desktop notifications for booking results (cross-platform)."""
 
-import subprocess
+from .platform_utils import send_notification
 
 
 def notify(title: str, message: str):
-    """Send a macOS notification."""
-    try:
-        subprocess.run(
-            [
-                "osascript",
-                "-e",
-                f'display notification "{message}" with title "{title}" sound name "Glass"',
-            ],
-            check=False,
-            timeout=5,
-        )
-    except Exception:
-        pass
+    send_notification(title, message)
