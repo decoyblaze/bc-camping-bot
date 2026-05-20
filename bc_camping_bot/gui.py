@@ -1130,7 +1130,9 @@ def main():
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
-                _ = p.chromium.executable_path
+                path = p.chromium.executable_path
+                if not Path(path).exists():
+                    raise FileNotFoundError(f"Browser not found at {path}")
         except Exception:
             api._log("First run — installing browser (one-time)...")
             api._status("Installing browser...", "waiting")

@@ -44,6 +44,7 @@ jobs:
             --hidden-import plyer.platforms.macosx \
             --hidden-import plyer.platforms.macosx.notification \
             run.py
+          find dist -name ".local-browsers" -type d -exec rm -rf {} + 2>/dev/null || true
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
@@ -56,6 +57,7 @@ jobs:
             --hidden-import plyer.platforms.win \
             --hidden-import plyer.platforms.win.notification \
             run.py
+          find dist -name ".local-browsers" -type d -exec rm -rf {} + 2>/dev/null || true
 
       - name: Create archive (macOS)
         if: runner.os == 'macOS'
