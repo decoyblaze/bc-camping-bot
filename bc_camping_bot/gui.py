@@ -1140,11 +1140,11 @@ def main():
                 env = {**os.environ}
                 try:
                     from playwright._impl._driver import compute_driver_executable, get_driver_env
-                    driver = str(compute_driver_executable())
+                    node, cli_js = compute_driver_executable()
                     env.update(get_driver_env())
-                    subprocess.run([driver, "install", "chromium"],
+                    subprocess.run([str(node), str(cli_js), "install", "chromium"],
                                    check=True, capture_output=True, timeout=300, env=env)
-                except (ImportError, AttributeError):
+                except (ImportError, AttributeError, ValueError):
                     subprocess.run(
                         [sys.executable, "-m", "playwright", "install", "chromium"],
                         check=True, capture_output=True, timeout=300, env=env,
