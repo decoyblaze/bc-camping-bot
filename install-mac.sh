@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 echo ""
 echo "=== Installing BC Camping Bot ==="
@@ -28,11 +27,13 @@ mv "$TMPDIR/BC Camping Bot.app" /Applications/
 xattr -cr "/Applications/BC Camping Bot.app"
 
 echo "Signing app (required for Apple Silicon)..."
-find "/Applications/BC Camping Bot.app" -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.o" \) | while read -r f; do
+find "/Applications/BC Camping Bot.app" -type f -perm +111 | while read -r f; do
     codesign --force -s - "$f" 2>/dev/null || true
 done
-codesign --force -s - "/Applications/BC Camping Bot.app/Contents/MacOS/BC Camping Bot"
-codesign --force --deep -s - "/Applications/BC Camping Bot.app"
+echo "Signing main executable..."
+codesign --force -s - "/Applications/BC Camping Bot.app/Contents/MacOS/BC Camping Bot" 2>&1
+echo "Signing app bundle..."
+codesign --force --deep -s - "/Applications/BC Camping Bot.app" 2>&1
 
 rm -rf "$TMPDIR"
 
