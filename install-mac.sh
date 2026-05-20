@@ -26,7 +26,7 @@ if [ -d "/Applications/BC Camping Bot.app" ]; then
 fi
 mv "$TMPDIR/BC Camping Bot.app" /Applications/
 xattr -cr "/Applications/BC Camping Bot.app"
-codesign --remove-signature "/Applications/BC Camping Bot.app" 2>/dev/null || true
+codesign --force --deep -s - "/Applications/BC Camping Bot.app" 2>/dev/null || true
 
 rm -rf "$TMPDIR"
 
