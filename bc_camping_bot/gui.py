@@ -27,6 +27,7 @@ DATA_DIR = Path.home() / ".bc-camping-bot"
 def get_data_dir():
     DATA_DIR.mkdir(exist_ok=True)
     (DATA_DIR / "sessions").mkdir(exist_ok=True)
+    (DATA_DIR / "browsers").mkdir(exist_ok=True)
     return DATA_DIR
 
 
@@ -1080,6 +1081,11 @@ class Api:
 def main():
     default_name = "Test"
 
+    os.environ.setdefault(
+        "PLAYWRIGHT_BROWSERS_PATH",
+        str(DATA_DIR / "browsers"),
+    )
+
     from .platform_utils import chrome_user_data_dir
     chrome_data = chrome_user_data_dir()
     profile_options = ""
@@ -1129,16 +1135,17 @@ def main():
             api._log("First run — installing browser (one-time)...")
             api._status("Installing browser...", "waiting")
             try:
+                env = {**os.environ}
                 try:
                     from playwright._impl._driver import compute_driver_executable, get_driver_env
                     driver = str(compute_driver_executable())
-                    env = get_driver_env()
+                    env.update(get_driver_env())
                     subprocess.run([driver, "install", "chromium"],
                                    check=True, capture_output=True, timeout=300, env=env)
                 except (ImportError, AttributeError):
                     subprocess.run(
                         [sys.executable, "-m", "playwright", "install", "chromium"],
-                        check=True, capture_output=True, timeout=300,
+                        check=True, capture_output=True, timeout=300, env=env,
                     )
                 api._success("Browser installed.")
                 api._status("Ready", "ready")
