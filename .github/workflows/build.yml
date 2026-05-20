@@ -57,6 +57,10 @@ jobs:
             --hidden-import plyer.platforms.win.notification \
             run.py
 
+      - name: Sign app (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --force --deep -s - "dist/BC Camping Bot.app"
+
       - name: Create archive (macOS)
         if: runner.os == 'macOS'
         run: cd dist && zip -r ../${{ matrix.zip_name }} "BC Camping Bot.app"
@@ -90,3 +94,12 @@ jobs:
             BC-Camping-Bot-macOS.zip
             BC-Camping-Bot-Windows.zip
           generate_release_notes: true
+          body: |
+            ## Download
+            - **macOS**: `BC-Camping-Bot-macOS.zip` — unzip and move to Applications
+            - **Windows**: `BC-Camping-Bot-Windows.zip` — unzip and run `BC Camping Bot.exe`
+
+            ## First launch
+            - **macOS**: Right-click the app → Open → Open (required once since the app isn't notarized)
+            - **Windows**: You may need to click "More info" → "Run anyway" on the SmartScreen prompt
+            - Both platforms will auto-install the browser engine on first launch (~150 MB one-time download)
