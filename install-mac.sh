@@ -28,9 +28,11 @@ mv "$TMPDIR/BC Camping Bot.app" /Applications/
 xattr -cr "/Applications/BC Camping Bot.app"
 
 echo "Signing app (required for Apple Silicon)..."
-find "/Applications/BC Camping Bot.app" -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.o" \) -exec codesign --force -s - {} \; 2>/dev/null
-codesign --force -s - "/Applications/BC Camping Bot.app/Contents/MacOS/BC Camping Bot" 2>/dev/null
-codesign --force --deep -s - "/Applications/BC Camping Bot.app" 2>/dev/null
+find "/Applications/BC Camping Bot.app" -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.o" \) | while read -r f; do
+    codesign --force -s - "$f" 2>/dev/null || true
+done
+codesign --force -s - "/Applications/BC Camping Bot.app/Contents/MacOS/BC Camping Bot"
+codesign --force --deep -s - "/Applications/BC Camping Bot.app"
 
 rm -rf "$TMPDIR"
 
