@@ -28,3 +28,7 @@ venv/
 # IDE / system
 .DS_Store
 .claude/
+
+# Debug snapshots
+.playwright-mcp/
+fc_*.md
