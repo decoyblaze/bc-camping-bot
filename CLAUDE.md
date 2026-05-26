@@ -1,6 +1,6 @@
 # BC Camping Bot
 
-Automated booking bot for camping.bcparks.ca — supports both backcountry and frontcountry campsite reservations. Fires at exactly 7:00 AM PT when the booking window opens.
+Automated booking bot for camping.bcparks.ca and reserve.bcparks.ca — supports backcountry, frontcountry campsite, and day-use pass reservations. Fires at exactly 7:00 AM PT when the booking window opens.
 
 ## How to run
 
@@ -19,6 +19,7 @@ CLI alternative: `.venv/bin/book --force`
 - `bc_camping_bot/timesync.py` — NTP sync for precise 7 AM execution.
 - `bc_camping_bot/stealth.py` — Anti-detection measures (user agent, stealth JS). No viewport override — browser uses natural window size.
 - `bc_camping_bot/config.py` — YAML config parser + `Booking` dataclass.
+- `bc_camping_bot/dayuse.py` — Day-use pass booking logic for reserve.bcparks.ca/dayuse/. Separate Angular SPA with AWS API backend.
 - `bc_camping_bot/notify.py` — macOS notifications.
 - `bc_camping_bot/session.py` — Session save/load helpers.
 - `configs/booking.yaml` — Booking configuration.
@@ -36,6 +37,17 @@ CLI alternative: `.venv/bin/book --force`
 - `searchTabGroupId=0`, `bookingCategoryId=0`
 - GUI supports up to 5 fallback sites tried in priority order
 - Equipment selection (1 Tent, 2 Tents, Van/Camper, etc.) done via page dropdown, not URL params
+
+### Day-Use Pass
+- Completely different site: `reserve.bcparks.ca/dayuse/` (Angular 19 SPA)
+- API backend: AWS API Gateway at `d757dzcblh.execute-api.ca-central-1.amazonaws.com/api/`
+- No login required — uses Cloudflare Turnstile CAPTCHA instead
+- Booking window: 7 AM PT, 2 days before visit date
+- Pass types: Parking (vehicle pass, 1 per vehicle, up to 12 people) and Trail (per person, max 4)
+- Time slots: ALL DAY, AM (7am–1pm), PM (after 1pm) — depends on facility
+- Parks in `DAYUSE_PARKS` dict: Golden Ears (4 facilities), Joffre Lakes (1 trail), Garibaldi (3 trailheads), Mount Seymour (winter)
+- Flow: Select park → fill form (date, facility, time, passes) → Turnstile CAPTCHA → contact form (name, email) → submit → confirmation with registration number
+- 7-minute timer after selecting a pass — must complete booking within 7 minutes
 
 ## Backcountry real run flow (GUI — Start Bot)
 
@@ -65,6 +77,18 @@ CLI alternative: `.venv/bin/book --force`
    d. If no Reserve button within 2s → site unavailable, try next
 9. Retries up to 10 cycles (re-clicks Search each cycle)
 10. If Full Checkout: same 6 checkout steps as backcountry
+
+## Day-use real run flow (GUI — Start Bot)
+
+1. Pre-navigates to reserve.bcparks.ca/dayuse/ and clicks Book a Pass for selected park
+2. Waits until 30s before 7 AM, then refreshes page for fresh state
+3. Waits for 7:00:00.000 PT (NTP-synced)
+4. Fills form: visit date, facility dropdown, time slot radio, pass count
+5. Clicks Next → Turnstile CAPTCHA modal appears
+6. Turnstile auto-solves (invisible challenge) or user clicks checkbox
+7. After Turnstile: fills contact form (first name, last name, email)
+8. Clicks Submit → confirmation page with registration number
+9. Retries up to 5 cycles if any step fails (re-navigates each time)
 
 ## Frontcountry map interaction — KEY DETAILS
 

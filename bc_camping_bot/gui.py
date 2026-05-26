@@ -155,6 +155,7 @@ HTML = """
       <select id="booking_type" onchange="toggleBookingType()">
         <option value="backcountry">Backcountry</option>
         <option value="frontcountry" selected>Frontcountry / Campsite</option>
+        <option value="dayuse">Day-Use Pass</option>
       </select>
     </div>
 
@@ -238,6 +239,47 @@ HTML = """
           <option value="-32763">Trailer or RV up to 32ft</option>
           <option value="-32762">Trailer or RV over 32ft</option>
         </select>
+      </div>
+    </div>
+
+    <!-- Day-Use Pass fields -->
+    <div id="du_fields" style="display:none">
+      <div class="field">
+        <label>Park</label>
+        <select id="du_park" onchange="updateDuFacilities()">
+          DU_PARK_OPTIONS
+        </select>
+      </div>
+      <div class="field">
+        <label>Facility</label>
+        <select id="du_facility">
+          <option value="">Loading...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Time Slot</label>
+        <select id="du_time">
+          <option value="DAY" selected>All Day</option>
+          <option value="AM">AM</option>
+          <option value="PM">PM</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Passes</label>
+        <input id="du_passes" type="number" value="1" min="1" max="4" style="width:80px;flex:none">
+        <span class="hint">Trail: 1-4 per person. Parking: 1 per vehicle.</span>
+      </div>
+      <div class="field">
+        <label>First Name</label>
+        <input id="du_first" value="" placeholder="Required">
+      </div>
+      <div class="field">
+        <label>Last Name</label>
+        <input id="du_last" value="" placeholder="Required">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input id="du_email" type="email" value="" placeholder="Confirmation sent here">
       </div>
     </div>
 
@@ -340,17 +382,76 @@ HTML = """
       hintEl.textContent = '7:00 AM PT on ' + months[bdate.getMonth()] + ' ' + bdate.getDate();
     }
 
-    arrivalEl.addEventListener('change', () => { updateDeparture(); updateBookingDate(); });
+    arrivalEl.addEventListener('change', () => {
+      const bt = document.getElementById('booking_type').value;
+      updateDeparture();
+      if (bt === 'dayuse') updateBookingDateDayuse();
+      else updateBookingDate();
+    });
     nightsEl.addEventListener('change', updateDeparture);
 
     const FC_AREAS = FC_AREAS_JSON;
+
+    const DU_FACILITIES = DU_FACILITIES_JSON;
 
     function toggleBookingType() {
       const bt = document.getElementById('booking_type').value;
       document.getElementById('bc_fields').style.display = bt === 'backcountry' ? '' : 'none';
       document.getElementById('fc_fields').style.display = bt === 'frontcountry' ? '' : 'none';
+      document.getElementById('du_fields').style.display = bt === 'dayuse' ? '' : 'none';
+      // Hide camping-specific fields for day-use
+      ['departure', 'nights', 'mode'].forEach(function(id) {
+        var el = document.getElementById(id);
+        var field = el ? el.closest('.field') : null;
+        if (field) field.style.display = bt === 'dayuse' ? 'none' : '';
+      });
+      // Day-use uses a dedicated Chrome profile (no login needed)
+      var loginEl = document.getElementById('login_method');
+      var loginField = loginEl ? loginEl.closest('.field') : null;
+      var chromeField = document.getElementById('chrome_profile_row');
+      var sessionField = document.getElementById('session_name_row');
+      var btnLogin = document.getElementById('btn_login');
+      if (bt === 'dayuse') {
+        if (loginField) loginField.style.display = 'none';
+        if (chromeField) chromeField.style.display = 'none';
+        if (sessionField) sessionField.style.display = 'none';
+        if (btnLogin) btnLogin.style.display = 'none';
+      } else {
+        if (loginField) loginField.style.display = '';
+        toggleLoginFields();
+      }
+      // Relabel arrival date for day-use
+      var arrField = arrivalEl ? arrivalEl.closest('.field') : null;
+      var arrLabel = arrField ? arrField.querySelector('label') : null;
+      if (arrLabel) arrLabel.textContent = bt === 'dayuse' ? 'Visit Date' : 'Arrival Date';
+      // Update booking date hint
+      if (bt === 'dayuse') updateBookingDateDayuse();
+      else updateBookingDate();
     }
     toggleBookingType();
+
+    function updateBookingDateDayuse() {
+      const arrival = new Date(arrivalEl.value + 'T00:00:00');
+      const bdate = new Date(arrival);
+      bdate.setDate(bdate.getDate() - 2);
+      bookingEl.value = bdate.toISOString().split('T')[0];
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      hintEl.textContent = '7:00 AM PT on ' + months[bdate.getMonth()] + ' ' + bdate.getDate();
+    }
+
+    function updateDuFacilities() {
+      const park = document.getElementById('du_park').value;
+      const facSelect = document.getElementById('du_facility');
+      const facilities = DU_FACILITIES[park] || [];
+      facSelect.innerHTML = '';
+      facilities.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        facSelect.appendChild(opt);
+      });
+    }
+    updateDuFacilities();
 
     function updateFcAreas() {
       const park = document.getElementById('fc_park').value;
@@ -401,6 +502,17 @@ HTML = """
         base.people = parseInt(document.getElementById('people').value);
         base.pads = parseInt(document.getElementById('pads').value);
         base.equipment = document.getElementById('equipment').value;
+      } else if (bt === 'dayuse') {
+        base.park = document.getElementById('du_park').value;
+        base.du_facility = document.getElementById('du_facility').value;
+        base.du_time = document.getElementById('du_time').value;
+        base.du_passes = parseInt(document.getElementById('du_passes').value) || 1;
+        base.du_first = document.getElementById('du_first').value.trim();
+        base.du_last = document.getElementById('du_last').value.trim();
+        base.du_email = document.getElementById('du_email').value.trim();
+        base.people = 1;
+        base.pads = 0;
+        base.equipment = 'tent';
       } else {
         base.park = document.getElementById('fc_park').value;
         base.fc_area = document.getElementById('fc_area').value;
@@ -646,6 +758,11 @@ class Api:
 
     def _run_bot(self, test_run, full_checkout, test_timer=False):
         data = self._get_form_data()
+        is_dayuse = data.get("booking_type") == "dayuse"
+
+        if is_dayuse:
+            return self._run_dayuse_bot(data, test_run, test_timer)
+
         try:
             booking = self._build_booking(data)
         except Exception as e:
@@ -913,6 +1030,281 @@ class Api:
                 while True:
                     await asyncio.sleep(60)
 
+    # ── Day-Use Pass Flow ────────────────────────────────────
+
+    def _run_dayuse_bot(self, data, test_run, test_timer):
+        park = data.get("park", "")
+        facility = data.get("du_facility", "")
+        visit_date = data.get("arrival", "")
+        time_slot = data.get("du_time", "DAY")
+        num_passes = data.get("du_passes", 1)
+        first_name = data.get("du_first", "")
+        last_name = data.get("du_last", "")
+        email = data.get("du_email", "")
+
+        if not test_run and (not first_name or not last_name or not email):
+            self._error("First name, last name, and email are required for day-use passes.")
+            return
+
+        self._set_running(True)
+        label = "Day-Use Test Run" if test_run else "Day-Use Pass"
+        self._status(f"{label} in progress...", "running")
+        self._log(f"--- {label} ---")
+        self._log(f"  Park: {park}")
+        self._log(f"  Facility: {facility}")
+        self._log(f"  Visit date: {visit_date}")
+        self._log(f"  Time slot: {time_slot}")
+        self._log(f"  Passes: {num_passes}")
+        self._log(f"  Contact: {first_name} {last_name} ({email})")
+        if not test_run:
+            if test_timer:
+                self._log(f"  TEST TIMER: firing 1 min from now")
+            else:
+                booking_date = date.fromisoformat(visit_date) - timedelta(days=2)
+                self._log(f"  Opens: {booking_date.isoformat()} 07:00:00 PT")
+
+        def run():
+            loop = asyncio.new_event_loop()
+            self._worker_loop = loop
+            try:
+                loop.run_until_complete(
+                    self._run_dayuse_flow(
+                        data, test_run=test_run, test_timer=test_timer,
+                    )
+                )
+            except asyncio.CancelledError:
+                self._log("Cancelled.")
+                self._status("Cancelled", "error")
+            except Exception as e:
+                import traceback
+                self._error(f"Error: {e}")
+                self._error(traceback.format_exc())
+                self._status("Failed", "error")
+            finally:
+                self._set_running(False)
+                loop.close()
+
+        self._worker_thread = threading.Thread(target=run, daemon=True)
+        self._worker_thread.start()
+
+    async def _run_dayuse_flow(self, data, test_run, test_timer):
+        self._worker_task = asyncio.current_task()
+        import time as _time
+        from datetime import date, datetime, timedelta
+        from pathlib import Path
+
+        from playwright.async_api import async_playwright
+
+        from .dayuse import (
+            DAYUSE_URL,
+            navigate_to_park,
+            fill_form,
+            wait_for_captcha_and_next,
+            fill_contact_form,
+            submit_booking,
+            check_availability,
+        )
+        from .notify import notify
+        from .stealth import apply_stealth
+        from .timesync import get_ntp_offset, precise_time, wait_until
+
+        park = data.get("park", "")
+        facility = data.get("du_facility", "")
+        visit_date = data.get("arrival", "")
+        time_slot = data.get("du_time", "DAY")
+        num_passes = data.get("du_passes", 1)
+        first_name = data.get("du_first", "")
+        last_name = data.get("du_last", "")
+        email = data.get("du_email", "")
+
+        ntp_offset = get_ntp_offset()
+
+        profile_dir = Path.home() / ".bc-camping-bot" / "browser-profiles" / "dayuse"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        for lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+            (profile_dir / lock).unlink(missing_ok=True)
+
+        chrome_proc = None
+        async with async_playwright() as pw:
+            self._log("Launching Chrome for day-use...")
+            try:
+                import subprocess, re as _re
+                chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                chrome_proc = subprocess.Popen(
+                    [chrome_path,
+                     f"--remote-debugging-port=0",
+                     f"--user-data-dir={profile_dir}",
+                     "--disable-blink-features=AutomationControlled",
+                     "--no-first-run",
+                     "--no-default-browser-check",
+                     "about:blank"],
+                    stderr=subprocess.PIPE,
+                )
+                ws_url = None
+                import select as _sel
+                deadline = _time.monotonic() + 15
+                buf = b""
+                while _time.monotonic() < deadline:
+                    ready, _, _ = _sel.select([chrome_proc.stderr], [], [], 0.5)
+                    if ready:
+                        buf += chrome_proc.stderr.read1(4096) if hasattr(chrome_proc.stderr, 'read1') else chrome_proc.stderr.readline()
+                    for line in buf.decode(errors="ignore").splitlines():
+                        if "DevTools listening on" in line:
+                            ws_url = line.split("DevTools listening on ")[-1].strip()
+                            break
+                    if ws_url:
+                        break
+                if not ws_url:
+                    raise RuntimeError("Chrome did not expose debugging port")
+                self._log(f"Chrome PID {chrome_proc.pid}, connecting via CDP...")
+                browser = await pw.chromium.connect_over_cdp(ws_url)
+                context = browser.contexts[0]
+                page = context.pages[0] if context.pages else await context.new_page()
+            except Exception as e:
+                self._error(f"Failed to launch Chrome: {e}")
+                if chrome_proc:
+                    chrome_proc.terminate()
+                return
+            await apply_stealth(page)
+            self._success("Chrome launched (separate profile — your Chrome is untouched).")
+
+            try:
+                self._log("Navigating to day-use site...")
+                await page.goto(DAYUSE_URL, wait_until="domcontentloaded", timeout=30000)
+                self._log(f"Page loaded: {page.url}")
+                if test_run:
+                    t0 = _time.monotonic()
+                    self._log("Selecting park...")
+                    ok = await navigate_to_park(page, park, self._log)
+                    if not ok:
+                        self._error("Failed to navigate to park")
+                        return
+                    self._success(f"On registration page ({_time.monotonic()-t0:.2f}s)")
+
+                    self._log("Filling form...")
+                    ok = await fill_form(page, visit_date, facility, time_slot, num_passes, self._log)
+                    if not ok:
+                        self._error("Failed to fill form — pass may not be available for this date/time")
+                        self._log("(Expected if booking window isn't open yet)")
+                    else:
+                        self._success(f"Form filled ({_time.monotonic()-t0:.2f}s)")
+                        avail = await check_availability(page, self._log)
+                        for slot, text in avail.items():
+                            self._log(f"  {slot}: {text}")
+
+                    self._log(f"=== TOTAL: {_time.monotonic()-t0:.2f}s ===")
+                    self._success("Test complete. Browser stays open for 15s.")
+                    self._status("Test complete", "success")
+                    await asyncio.sleep(15)
+                    return
+
+                # ── Real day-use run ──
+                if test_timer:
+                    target = precise_time(ntp_offset) + timedelta(seconds=60)
+                    self._log(f"TEST TIMER: target set to {target.strftime('%H:%M:%S')}")
+                else:
+                    booking_date = date.fromisoformat(visit_date) - timedelta(days=2)
+                    target = datetime(booking_date.year, booking_date.month, booking_date.day, 7, 0, 0)
+
+                remaining = (target - precise_time(ntp_offset)).total_seconds()
+
+                # Always navigate to park page first
+                self._log(f"Navigating to {park}...")
+                ok = await navigate_to_park(page, park, self._log)
+                if not ok:
+                    self._error("Failed to navigate to park")
+                    return
+                self._success("Day-use page loaded.")
+
+                if remaining > 60:
+                    pre_target = target - timedelta(seconds=30)
+                    wait_pre = (pre_target - precise_time(ntp_offset)).total_seconds()
+                    if wait_pre > 0:
+                        self._log(f"Waiting {wait_pre:.0f}s before 7 AM...")
+                        self._status(f"Waiting for 7:00 AM PT ({wait_pre:.0f}s)...", "waiting")
+                        wait_until(pre_target, ntp_offset)
+
+                    # Refresh right before 7 AM for fresh state
+                    self._log("Refreshing page before 7 AM...")
+                    ok = await navigate_to_park(page, park, self._log)
+                    if not ok:
+                        self._error("Failed to refresh park page")
+                        return
+
+                remaining = (target - precise_time(ntp_offset)).total_seconds()
+                if remaining > 0:
+                    self._log(f"Waiting {remaining:.0f}s for 7:00 AM...")
+                    self._status(f"Waiting for 7:00 AM PT ({remaining:.0f}s)...", "waiting")
+                    wait_until(target, ntp_offset)
+
+                self._success("GO! Booking window open.")
+                self._status("Booking NOW...", "running")
+                t_start = _time.monotonic()
+
+                for cycle in range(5):
+                    if cycle > 0:
+                        self._log(f"--- Retry {cycle+1}/5 ---")
+                        self._log("Refreshing page...")
+                        ok = await navigate_to_park(page, park, self._log)
+                        if not ok:
+                            continue
+
+                    self._log("Filling form...")
+                    ok = await fill_form(page, visit_date, facility, time_slot, num_passes, self._log)
+                    if not ok:
+                        self._log("Pass not available yet — retrying...")
+                        await asyncio.sleep(1)
+                        continue
+
+                    avail = await check_availability(page, self._log)
+                    for slot, text in avail.items():
+                        self._log(f"  {slot}: {text}")
+
+                    self._status("Click CAPTCHA checkbox!", "waiting")
+                    ok = await wait_for_captcha_and_next(page, self._log)
+                    if not ok:
+                        self._error("Timed out waiting for CAPTCHA — retrying...")
+                        continue
+
+                    t_form = _time.monotonic()
+                    self._success(f"Past CAPTCHA ({t_form - t_start:.2f}s)")
+
+                    self._log("Filling contact info...")
+                    ok = await fill_contact_form(page, first_name, last_name, email, log_fn=self._log)
+                    if not ok:
+                        self._error("Failed to fill contact form")
+                        continue
+
+                    self._log("Submitting booking...")
+                    reg_num = await submit_booking(page, self._log)
+                    if reg_num:
+                        t_total = _time.monotonic() - t_start
+                        self._success(f"PASS BOOKED! Registration: {reg_num} ({t_total:.2f}s)")
+                        self._status(f"BOOKED! Reg: {reg_num} ({t_total:.1f}s)", "success")
+                        notify("Day-Use Bot", f"Pass booked! {park} — {reg_num}")
+                        break
+                    else:
+                        self._log("Submission may have succeeded — check the browser")
+                        break
+                else:
+                    self._error("All attempts exhausted.")
+                    self._log(">>> Check the browser — try manually! <<<")
+                    notify("Day-Use Bot", f"FAILED to book {park} pass")
+
+                self._log("Browser will stay open. Close it manually when done.")
+                while True:
+                    await asyncio.sleep(60)
+
+            except asyncio.CancelledError:
+                self._log("Cancelled.")
+                self._status("Cancelled", "error")
+            except Exception as e:
+                self._error(f"Unexpected error: {e}")
+                self._log("Browser will stay open. Close it manually when done.")
+                self._status("Error — check browser", "error")
+                while True:
+                    await asyncio.sleep(60)
+
     # ── Frontcountry Flow ─────────────────────────────────────
 
     async def _run_frontcountry_flow(
@@ -1113,10 +1505,19 @@ def main():
         fc_park_options += f'<option value="{park_name}">{park_name}</option>\n'
         fc_areas_dict[park_name] = park_data.get("areas", {})
 
+    from .dayuse import DAYUSE_PARKS
+    du_park_options = ""
+    du_facilities_dict = {}
+    for park_name, park_data in sorted(DAYUSE_PARKS.items()):
+        du_park_options += f'<option value="{park_name}">{park_name}</option>\n'
+        du_facilities_dict[park_name] = park_data.get("facilities", [])
+
     html = HTML.replace("SESSION_NAME_PLACEHOLDER", default_name)
     html = html.replace("CHROME_PROFILE_OPTIONS", profile_options)
     html = html.replace("FC_PARK_OPTIONS", fc_park_options)
     html = html.replace("FC_AREAS_JSON", json.dumps(fc_areas_dict))
+    html = html.replace("DU_PARK_OPTIONS", du_park_options)
+    html = html.replace("DU_FACILITIES_JSON", json.dumps(du_facilities_dict))
 
     api = Api()
 

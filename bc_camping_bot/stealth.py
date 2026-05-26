@@ -24,25 +24,26 @@ USER_AGENTS = WINDOWS_USER_AGENTS if sys.platform == "win32" else MAC_USER_AGENT
 
 STEALTH_JS = """
 () => {
-    // Remove webdriver flag (primary bot signal)
     Object.defineProperty(navigator, 'webdriver', {
         get: () => undefined,
         configurable: true,
     });
 
-    // Chrome runtime must exist on Chrome UA
     if (!window.chrome) {
         window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
     }
+    if (!window.chrome.runtime) {
+        window.chrome.runtime = {};
+    }
+    window.chrome.runtime.connect = function() { return { onMessage: { addListener: function(){} }, postMessage: function(){} }; };
+    window.chrome.runtime.sendMessage = function(msg, cb) { if (cb) cb(); };
 
-    // Override permissions query (Queue-IT checks notification permissions)
     const originalQuery = window.navigator.permissions.query;
     window.navigator.permissions.query = (parameters) =>
         parameters.name === 'notifications'
             ? Promise.resolve({ state: Notification.permission })
             : originalQuery(parameters);
 
-    // Realistic plugin list
     Object.defineProperty(navigator, 'plugins', {
         get: () => {
             const arr = [
@@ -57,26 +58,34 @@ STEALTH_JS = """
         },
     });
 
-    // Languages consistent with locale
     Object.defineProperty(navigator, 'languages', {
         get: () => ['en-CA', 'en-US', 'en'],
     });
 
-    // Hide automation-related properties
     delete navigator.__proto__.webdriver;
 
-    // Consistent hardware concurrency
     Object.defineProperty(navigator, 'hardwareConcurrency', {
         get: () => 8,
     });
 
-    // Device memory (Chrome-specific)
     Object.defineProperty(navigator, 'deviceMemory', {
         get: () => 8,
     });
 
-    // Prevent iframe-based detection
-    const originalAttachShadow = Element.prototype.attachShadow;
+    // Hide CDP artifacts that Cloudflare Turnstile probes
+    var cdc_props = Object.getOwnPropertyNames(window).filter(function(p) {
+        return p.match(/cdc_|__playwright|__driver/);
+    });
+    for (var i = 0; i < cdc_props.length; i++) {
+        delete window[cdc_props[i]];
+    }
+
+    // Fake connection.rtt (Turnstile checks for 0 = automated)
+    if (navigator.connection) {
+        Object.defineProperty(navigator.connection, 'rtt', { get: () => 50 });
+    }
+
+    var originalAttachShadow = Element.prototype.attachShadow;
     Element.prototype.attachShadow = function() {
         return originalAttachShadow.apply(this, arguments);
     };
