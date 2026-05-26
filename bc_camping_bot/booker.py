@@ -257,15 +257,19 @@ async def frontcountry_find_sites(page: Page, site_names: list[str]) -> dict[str
     """Batch-find SVG IDs for all sites in one evaluate call.
 
     Returns {site_name: svg_id} for sites found on the map.
+    Handles area prefixes: "A41" matches label "41" and vice versa.
     """
     return await page.evaluate("""(siteNames) => {
         const map = {};
         const labels = document.querySelectorAll('.map-site-label');
         for (const name of siteNames) {
-            const target = name.toUpperCase();
+            const target = name.trim().toUpperCase();
+            const numOnly = target.replace(/^[A-Z]+[-\\s]?/, '');
             for (const lbl of labels) {
                 const child = lbl.querySelector('[id$="-label"]');
-                if (child && child.textContent?.trim().toUpperCase() === target) {
+                if (!child) continue;
+                const text = child.textContent.trim().toUpperCase();
+                if (text === target || text === numOnly || target === text.replace(/^[A-Z]+[-\\s]?/, '')) {
                     map[name] = child.id.replace('-label', '');
                     break;
                 }
@@ -353,6 +357,21 @@ async def frontcountry_add_to_cart(
     _log(f"  Map ready ({_time.monotonic() - t0:.2f}s)")
 
     site_ids = await frontcountry_find_sites(page, sites)
+    if not site_ids and labels_exist:
+        import asyncio as _asyncio
+        await _asyncio.sleep(2)
+        site_ids = await frontcountry_find_sites(page, sites)
+    if not site_ids:
+        sample = await page.evaluate("""() => {
+            var labels = document.querySelectorAll('.map-site-label');
+            var texts = [];
+            for (var i = 0; i < Math.min(labels.length, 8); i++) {
+                var child = labels[i].querySelector('[id$="-label"]');
+                if (child) texts.push(child.textContent.trim());
+            }
+            return texts;
+        }""")
+        _log(f"  Map label samples: {sample}")
     _log(f"  Found {len(site_ids)}/{len(sites)} sites ({_time.monotonic() - t0:.2f}s)")
 
     for i, site in enumerate(sites):

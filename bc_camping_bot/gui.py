@@ -1434,6 +1434,7 @@ class Api:
             self._error(f"Cycle {cycle+1} — no site reserved")
             if cycle < 9:
                 self._log("Retrying Search...")
+                await asyncio.sleep(2)
             else:
                 self._error("All 10 cycles exhausted.")
                 self._log(">>> Check the browser — try manually! <<<")
