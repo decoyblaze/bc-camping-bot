@@ -20,7 +20,7 @@ This guide walks you through installing and using the bot from scratch. No codin
 2. Click the green **Code** button, then click **Download ZIP**
 3. Open your **Downloads** folder and double-click the ZIP file to unzip it
 4. Drag the `bc-camping-bot-main` folder to your **Desktop** (or wherever you want to keep it)
-5. Rename it to `bc-camping-bot` (optional, just cleaner)
+5. Rename it to `bc-camping-bot` (MUST RENAME THE FILE)
 
 ---
 
