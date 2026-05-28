@@ -299,7 +299,7 @@ HTML = """
     <div class="field">
       <label>Booking Opens</label>
       <input id="booking_date" type="date" value="2026-04-25">
-      <span class="hint" id="booking_hint">7:00 AM PT on Apr 25</span>
+      <span class="hint" id="booking_hint">7:00 AM PT on Apr 25 — edit if wrong</span>
     </div>
     <div class="field">
       <label>Login Method</label>
@@ -373,17 +373,31 @@ HTML = """
       departureEl.value = dep.toISOString().split('T')[0];
     }
 
-    function updateBookingDate() {
-      const arrival = new Date(arrivalEl.value + 'T00:00:00');
-      const bdate = new Date(arrival);
-      bdate.setDate(bdate.getDate() - 91);
-      bookingEl.value = bdate.toISOString().split('T')[0];
+    var bookingDateManual = false;
+
+    function updateBookingDateHint() {
+      const bdate = new Date(bookingEl.value + 'T00:00:00');
       const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       hintEl.textContent = '7:00 AM PT on ' + months[bdate.getMonth()] + ' ' + bdate.getDate();
     }
 
+    function updateBookingDate() {
+      if (bookingDateManual) { updateBookingDateHint(); return; }
+      const arrival = new Date(arrivalEl.value + 'T00:00:00');
+      const bdate = new Date(arrival);
+      bdate.setDate(bdate.getDate() - 91);
+      bookingEl.value = bdate.toISOString().split('T')[0];
+      updateBookingDateHint();
+    }
+
+    bookingEl.addEventListener('change', () => {
+      bookingDateManual = true;
+      updateBookingDateHint();
+    });
+
     arrivalEl.addEventListener('change', () => {
       const bt = document.getElementById('booking_type').value;
+      bookingDateManual = false;
       updateDeparture();
       if (bt === 'dayuse') updateBookingDateDayuse();
       else updateBookingDate();
