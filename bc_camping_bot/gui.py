@@ -1458,7 +1458,7 @@ class Api:
             try:
                 self._log("--- Starting checkout ---")
                 from .booker import complete_checkout
-                await complete_checkout(page, self._log)
+                await complete_checkout(page, self._log, frontcountry=True)
                 t_total = _time.monotonic() - t_start
                 self._success(f"BOOKING COMPLETE! ({t_total:.2f}s)")
                 self._status(f"BOOKED {reserved_site}! ({t_total:.1f}s)", "success")

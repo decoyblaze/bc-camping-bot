@@ -76,7 +76,7 @@ CLI alternative: `.venv/bin/book --force`
    c. Scrolls into view and clicks Reserve
    d. If no Reserve button within 2s → site unavailable, try next
 9. Retries up to 10 cycles (re-clicks Search each cycle)
-10. If Full Checkout: same 6 checkout steps as backcountry
+10. If Full Checkout: navigates to /create-booking/cart, then same 5 checkout steps as backcountry (skips step 1 — frontcountry Reserve goes straight to cart, no /reservationmessages page)
 
 ## Day-use real run flow (GUI — Start Bot)
 

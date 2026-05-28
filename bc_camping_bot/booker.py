@@ -574,29 +574,35 @@ async def select_area_and_reserve(page: Page, campsite: str, log_fn=None) -> boo
     return True
 
 
-async def complete_checkout(page: Page, log_fn=None) -> bool:
-    """Full multi-step checkout: Reserve → Acknowledge → Confirm → Payment page.
+async def complete_checkout(page: Page, log_fn=None, frontcountry: bool = False) -> bool:
+    """Full multi-step checkout to payment page.
 
-    Steps after Reserve:
+    Backcountry steps (after "Reserve Area: ..."):
     1. /reservationmessages — check "All reservation details are correct." → Confirm
     2. /cart — "Proceed to checkout"
-    3. /reviewpolicies — check both policy checkboxes → "Confirm acknowledgements"
-    4. /contactinfo — "Confirm account details"
-    5. /permitholder — "I will be the occupant." (pre-selected) → "Confirm occupant"
-    6. /partyinfo — "Confirm party information"
-    7. Payment page — STOP (user enters payment manually)
+    3–6. policies, account, occupant, party → Payment
+
+    Frontcountry steps (after Reserve on map):
+    1. Navigate to cart (page is still on map after Reserve)
+    2. /cart — "Proceed to checkout"
+    3–6. Same as backcountry
     """
     import time as _time
     _log = log_fn or (lambda x: None)
     t0 = _time.monotonic()
     T = 45000
 
-    # Step 1: check box and confirm reservation details
-    checkbox = page.get_by_role("checkbox", name="All reservation details are correct.")
-    await checkbox.wait_for(state="visible", timeout=T)
-    await checkbox.check(force=True)
-    await page.get_by_role("button", name="Confirm reservation details").click()
-    _log(f"1/6 Reservation confirmed ({_time.monotonic() - t0:.2f}s)")
+    if frontcountry:
+        _log("Navigating to cart...")
+        cart_url = f"{BOOKING_URL}/create-booking/cart"
+        await page.goto(cart_url, wait_until="domcontentloaded", timeout=T)
+        _log(f"1/6 Cart loaded ({_time.monotonic() - t0:.2f}s)")
+    else:
+        checkbox = page.get_by_role("checkbox", name="All reservation details are correct.")
+        await checkbox.wait_for(state="visible", timeout=T)
+        await checkbox.check(force=True)
+        await page.get_by_role("button", name="Confirm reservation details").click()
+        _log(f"1/6 Reservation confirmed ({_time.monotonic() - t0:.2f}s)")
 
     # Step 2: proceed to checkout
     proceed_btn = page.get_by_role("button", name="Proceed to checkout")
