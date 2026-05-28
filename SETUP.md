@@ -63,6 +63,14 @@ A small window will open — this is the bot.
 
 ---
 
+## Updating the bot
+
+Double-click **update.command** in the `bc-camping-bot` folder. It pulls the latest version automatically.
+
+> **Note:** This only works if you installed using `git clone`. If you downloaded as a ZIP, you'll need to re-download the ZIP from GitHub.
+
+---
+
 ## How to book: Frontcountry (campsite reservations)
 
 This is for reserving a numbered campsite at parks like Alice Lake, Golden Ears, Cultus Lake, etc.
